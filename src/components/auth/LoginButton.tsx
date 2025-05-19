@@ -11,6 +11,8 @@ export default function LoginButton() {
     // Placeholder for Google OAuth logic
     // e.g., signIn('google') with NextAuth.js
     console.log('Attempting Google Login...');
+    window.location.href = '/auth/google/login';
+
     // After successful login and Firestore operations, redirect to /dashboard.
   };
 

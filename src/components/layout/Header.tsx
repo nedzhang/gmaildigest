@@ -5,14 +5,14 @@ import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import Logo from '@/components/icons/Logo';
 import { LogIn, LogOut } from 'lucide-react';
-
+import { User } from 'lucide-react';
 export default function Header() {
   const pathname = usePathname();
   const isDashboard = pathname === '/dashboard';
 
   // This is a simplified auth check. In a real app, you'd use a proper auth state.
   // For now, we assume logged in if on dashboard.
-  const isLoggedIn = isDashboard; 
+  const isLoggedIn = isDashboard;
 
   return (
     <header className="bg-card/80 backdrop-blur-md sticky top-0 z-50 border-b">
@@ -21,13 +21,18 @@ export default function Header() {
           <Logo className="w-8 h-8 text-primary" />
           Gmail Digest
         </Link>
-        <nav>
+        <nav className="flex items-center gap-4">
           {isLoggedIn ? (
-            <Link href="/">
-              <Button variant="ghost">
-                <LogOut className="mr-2 h-4 w-4" /> Logout
-              </Button>
-            </Link>
+            <>
+              <Link href="/user-info" title="User Profile">
+                <Button variant="ghost" size="icon">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+              <Link href="/">
+                <Button variant="ghost"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
+              </Link>
+            </>
           ) : (
             pathname !== '/' && ( // Only show login if not on landing and not logged in
               <Link href="/">

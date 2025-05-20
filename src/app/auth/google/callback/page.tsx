@@ -5,8 +5,21 @@ import { useEffect } from 'react';
 import { makeCallBackUrl } from '@/lib/client-util';
 import { googleOAuth2Callback } from './callback-backend';
 
+// export async function getServerSideProps(context) {
+//     const { req, res, query, params } = context;
+//     return {
+//         props: {
+//             req,
+//             res,
+//             query,
+//             params,
+//         },
+//     };
+// }
 
 const GoogleCallbackPage = () => {
+
+    // const req = serverConext.req;
 
     if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);

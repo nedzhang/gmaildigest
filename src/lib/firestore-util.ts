@@ -1,105 +1,33 @@
 'use server';
 
-import { getFirestore } from "firebase/firestore";
+// import { DocumentData, DocumentReference } from "firebase-admin/firestore";
+
+import { collection, addDoc, doc, updateDoc, DocumentReference, DocumentData, setDoc, getDoc, QueryDocumentSnapshot, getDocs } from "firebase/firestore";
+
 import { GoogleOAuthToken } from "./schema";
-import { doc, setDoc, collection, getDocs } from "firebase/firestore";
-// import { getFirestore, collection, getDocs } from 'npm:firebase/firestore';
 
-import admin from 'firebase-admin';
-import { App, getApps as getAdminApps } from 'firebase-admin/app';
-// import { getDatabase } from 'firebase-admin/database';
-
-import { initializeApp, getApps as getFirebaseApps, FirebaseApp } from "firebase/app";
-import { getAuth, signInWithCustomToken } from "firebase/auth";
-import { FirebaseServiceAccount } from "@/types/firebase";
-
-import SERVICE_ACCOUNT from "../../secret/firebase-admin-service-account.json";
-import { Console } from "console";
-
-
-// const SERVICE_ACCOUNT = JSON.parse(serviceAccountString);
-
-const firebaseConfig = {
-    apiKey: process.env.FIREBASE_API_KEY,
-    authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.FIREBASE_APP_ID,
-    // Your Firebase configuration
-};
+import { getDb } from "./firestore-auth";
+import { DocumentDataSchema } from "genkit";
+import { OAuthToken, OAuthTokenSchema, UserSecurityProfile, UserSecurityProfileSchema } from "@/types/firebase";
+import { User } from "firebase/auth";
+import { shallowCopyObjProperties } from "@/lib/object-util";
 
 
 
-// Initialize Firebase Admin (only once)
-function getAdminApp(): App {
-    if (!getAdminApps().length) {
-        admin.initializeApp({
-            credential: admin.credential.cert(JSON.stringify(SERVICE_ACCOUNT)),
-        })
+
+const PROJ_PREFIX = process.env.PROJECT_CODE;
+
+function getCollectionName(objectName: string): string {
+    if (PROJ_PREFIX) {
+        return `${PROJ_PREFIX}#${objectName}`;
+    } else {
+        throw new Error("**getCollectionName** missing project code");
     }
-    return getAdminApps()[0];
 }
 
-function getFirebaseApp(): FirebaseApp {
-    if (!getFirebaseApps().length) {
-        initializeApp(firebaseConfig);
-    }
+export async function updateUserOAuthToken(userToken: GoogleOAuthToken): Promise<DocumentReference<DocumentData, DocumentData>> {
 
-    return getFirebaseApps()[0];
-}
-
-async function signInWithFirebaseServiceAccount(app: FirebaseApp, cred: FirebaseServiceAccount) {
-
-    const uid = cred.client_email;
-    console.log("uid: ", uid);
-
-    const customToken = await admin.auth().createCustomToken(uid);
-    console.log("customToken: ", customToken);
-
-    // console.log('app to sign into is: ', app);
-
-    const auth = getAuth(app);
-    // console.log('got auth: ', auth);
-
-    // Sign in with custom token
-    return signInWithCustomToken(auth, customToken);
-}
-
-async function signIn() {
-    getAdminApp();
-
-    const firebaseApp = getFirebaseApp();
-
-    const userCred = await signInWithFirebaseServiceAccount(firebaseApp, SERVICE_ACCOUNT);
-
-    return userCred;
-}
-
-// // Get the Firebase Realtime Database instance
-// function getFirebaseDB() {
-//     initializeAdmin();
-//     return getDatabase();
-// }
-
-// async function getMainCollection() {
-//     await signIn();
-
-//     const db = getFirebaseDB();
-
-//     const collectionName = `${firebaseConfig.projectId}##gmail-digest`
-
-//     // In Firestore, collections are implicitly created when you add a document
-//     return collection(db, collectionName)
-// }
-
-function getCollectionName():string {
-    return `${firebaseConfig.projectId}##gmail-digest`;
-}
-
-export async function upsertUserToken(userToken: GoogleOAuthToken): Promise<void> {
-
-    console.log("**upsertUserToken** userToken: ", userToken);
+    // console.log("**upsertUserToken** userToken: ", userToken);
 
     const userEmail = userToken.payload?.email;
 
@@ -107,16 +35,69 @@ export async function upsertUserToken(userToken: GoogleOAuthToken): Promise<void
         throw new Error('**saveGoogleTokenToFirestore** User email not found in token payload');
     }
 
-    await signIn();
+    const db = await getDb();
 
-    const firebaseApp = getFirebaseApp();
+    const userDoc = doc(db, getCollectionName('users'), userEmail);
+    const userTokenCollection = collection(db, getCollectionName('users'), userEmail, 'tokens');
 
-    const db = getFirestore(firebaseApp);
+    // console.info("**upsertUserToken** userDoc: ", userDoc)
+    const tokenDoc = await addDoc(userTokenCollection, userToken);
 
-    const tokenDoc = doc(db, getCollectionName(), userEmail, 'token', 'last');
+    await updateDoc(tokenDoc, { db_id: tokenDoc.id })
 
-    console.info("**upsertUserToken** tokenDoc: ", tokenDoc)
+    await setDoc(userDoc, { login_email: userEmail, latest_token_id: tokenDoc.id, updated: Date.now() }, { merge: true });
 
-    return await setDoc(tokenDoc, userToken);
+    return userDoc;
 
+}
+
+export async function updateUser(user: UserSecurityProfile): Promise<void> {
+    const db = await getDb();
+
+    // console.log("**updateUser user to copy: ", user);
+    
+    const userDoc = doc(db, getCollectionName('users'), user.login_email!);
+
+    const userCopy = shallowCopyObjProperties(user, ['full_name', 'preferred_name', 'communication_email', 'email_verified'])
+
+    // console.log("**updateUser** copy of user", userCopy);
+
+    userCopy.updated = Date.now();
+    userCopy.accessed = Date.now();
+    
+    await updateDoc(userDoc, userCopy);
+}
+
+export async function getUser(userEmail: string): Promise<UserSecurityProfile | null> {
+
+    const db = await getDb();
+
+    const userDocRef = doc(db, getCollectionName('users'), userEmail);
+
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (userDocSnap.exists()) {
+        const docData = userDocSnap.data();
+        console.log("**getUser** docData: ", docData);
+
+        const userObj = UserSecurityProfileSchema.parse(docData);
+
+        const tokensSnap = await getDocs(
+            collection(db, getCollectionName('users'), userEmail, 'tokens')
+        );
+
+        const tokens: OAuthToken[] = [];
+
+        tokensSnap.forEach(async (tokenDocSnap) => {
+            const tokenData = OAuthTokenSchema.parse(tokenDocSnap.data());
+            // console.log("**getUser** tokenData: ", tokenData);
+            tokens.push(tokenData);
+        });
+
+        userObj.tokens = tokens;
+
+        return userObj;
+    } else {
+        return null;
+    }
 }

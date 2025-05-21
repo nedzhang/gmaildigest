@@ -2,9 +2,10 @@
 
 import { OAuth2Client } from "google-auth-library";
 import { GoogleOAuthToken } from "./schema";
+import { OAuthToken, OAuthTokenSchema } from "@/types/firebase";
 
 async function getTokens(callbackUrl:string, code: string) {
-    const res = await fetch("https://oauth2.googleapis.com/token", {
+    const res = await fetch(process.env.GOOGLE_TOKEN_URL!, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -12,7 +13,7 @@ async function getTokens(callbackUrl:string, code: string) {
         client_id: process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_ID!,
         client_secret: process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_SECRET!,
         redirect_uri: callbackUrl,
-        grant_type: "authorization_code",
+        grant_type: "authorization_code", // it is hardcoded to authorization_code to this process
       }),
     });
     return await res.json();
@@ -99,84 +100,11 @@ async function getGoogleOauth2Client(clientId:string, clientSecret:string, callb
 
     return oauth2Client;
 }
-
-
-// /**
-//  * The url created by Firebase oauth client doesn't return refresh token for some reason. 
-//  * Moved to use REST api
-//  * @param callbackUrl 
-//  * @returns 
-//  */
-// export async function getGoogleOAuthUrl(callbackUrl: string): Promise<string> {
-
-//     // try {
-//         const oauth2Client = await getGoogleOauth2Client(callbackUrl);
-
-//         const authUrl = oauth2Client.generateAuthUrl({
-//             access_type: "offline",
-//             scope: [
-//                 "https://www.googleapis.com/auth/userinfo.email",
-//                 "https://www.googleapis.com/auth/gmail.readonly",
-//             ],
-//         });
-
-//         // const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${googleRedirectUri}&response_type=code&scope=email profile openid`;
-
-//         return authUrl;
-//         // return NextResponse.redirect(authUrl);
-
-//     // } catch (error) {
-//     //     console.error('Error creating OAuth2 client:', error);
-//     //     return new NextResponse('Error creating OAuth2 client', { status: 500 });
-//     // }
-// }
-
-// export async function getGoogleOAuthUrlRest(redirectUrl: string): Promise<string> {
-
-//     const googleClientId = process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_ID;
-//     const googleClientSecret = process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_SECRET;
-
-//     if (!googleClientId || !googleClientSecret) {
-//         throw new Error('Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET environment variables');
-//     }
-
-//     const SCOPES = [
-//         "https://www.googleapis.com/auth/userinfo.email",
-//         "https://www.googleapis.com/auth/gmail.readonly",
-//     ];
-
-//     const scopes = SCOPES;
-
-//     return createOAuthUrl(googleClientId, redirectUrl, SCOPES);
-//   }
-
  
 export async function createOAuthUrl( oauthSetting: 
     { googleClientId?: string, callbackUrl?: string, scopes: string[] } ): Promise<string> {
     
-    const clientId = oauthSetting.googleClientId || process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_ID;
-
-    const callbackUrl = oauthSetting.callbackUrl || process.env.GOOGLE_AUTH_CALL_BACK_URL;
-
-    const scopes = oauthSetting.scopes;
-
-    const GOOGLE_OAUTH_URL = process.env.GOOGLE_OAUTH_URL;
-
-    if (!GOOGLE_OAUTH_URL) {
-        throw new Error('**createOAuthUrl** Missing GOOGLE_OAUTH_URL environment variable');
-    }
-
-    if (!clientId ) {
-        throw new Error('**createOAuthUrl** Missing googleClientId parameter or environmental variable FIREBASE_WEB_APP_GOOGLE_CLIENT_ID');
-    }
-
-    if (!callbackUrl) {
-        throw new Error('**createOAuthUrl** Missing callbackUrl parameter or environmental variable GOOGLE_AUTH_CALL_BACK_URL');
-    }
-
-    if (!scopes || scopes.length === 0) {
-        throw new Error('**createOAuthUrl** Missing scopes parameter');
-    }
+    const { clientId, callbackUrl, scopes, googleOAuthUrl } = getAuthSecret(oauthSetting);
 
     const goauthParams = {
         client_id: clientId,
@@ -191,5 +119,70 @@ export async function createOAuthUrl( oauthSetting:
 
     console.info('**createAuthUrl** with params:\n', JSON.stringify(goauthParams, null, 2));
 
-    return `${GOOGLE_OAUTH_URL}?${params}`;
+    return `${googleOAuthUrl}?${params}`;
+}
+
+function getAuthSecret(oauthSetting: { googleClientId?: string; callbackUrl?: string; scopes: string[]; }) {
+    const clientId = oauthSetting.googleClientId || process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_ID;
+
+    const callbackUrl = oauthSetting.callbackUrl || process.env.GOOGLE_AUTH_CALL_BACK_URL;
+
+    const scopes = oauthSetting.scopes;
+
+    const googleOAuthUrl = process.env.GOOGLE_OAUTH_URL;
+
+    if (!googleOAuthUrl) {
+        throw new Error('**createOAuthUrl** Missing GOOGLE_OAUTH_URL environment variable');
+    }
+
+    if (!clientId) {
+        throw new Error('**createOAuthUrl** Missing googleClientId parameter or environmental variable FIREBASE_WEB_APP_GOOGLE_CLIENT_ID');
+    }
+
+    if (!callbackUrl) {
+        throw new Error('**createOAuthUrl** Missing callbackUrl parameter or environmental variable GOOGLE_AUTH_CALL_BACK_URL');
+    }
+
+    if (!scopes || scopes.length === 0) {
+        throw new Error('**createOAuthUrl** Missing scopes parameter');
+    }
+    return { clientId, callbackUrl, scopes, googleOAuthUrl };
+}
+
+export async function getTokenRefresh(googleClientId: string, refreshToken:string): Promise<OAuthToken> {
+    // const { clientId } = getAuthSecret(oauthSetting);
+
+    // const tokenUrl = process.env.GOOGLE_TOKEN_URL;
+
+    // const tokenEndpoint = 'https://oauth2.googleapis.com/token';
+
+    const clientSecret = process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_SECRET;
+
+    if (!clientSecret) {
+        throw new Error('**getTokenRefresh** Missing environmental variable FIREBASE_WEB_APP_GOOGLE_CLIENT_SECRET')
+    }
+
+    if (!googleClientId) {
+        throw new Error('**getTokenRefresh** Missing googleClientId parameter')
+    }
+
+    if (!refreshToken) {
+        throw new Error('**getTokenRefresh** Missing refreshToken parameter')
+    }
+
+    const res = await fetch(process.env.GOOGLE_TOKEN_URL!, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+            client_id: googleClientId,
+            grant_type: "refresh_token", // it is hardcoded to refresh_token to this process
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+        }),
+      });
+
+      const result = await res.json();
+
+      return OAuthTokenSchema.parse(result);
+
 }

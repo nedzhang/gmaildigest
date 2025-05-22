@@ -42,6 +42,7 @@ function getFirebaseApp(): FirebaseApp {
     return getFirebaseApps()[0];
 }
 
+
 /**
  * Signs in to Firebase using a service account.
  * @param app - The Firebase App instance.
@@ -54,9 +55,7 @@ async function signInWithServiceAccount(app: FirebaseApp, cred: FirebaseServiceA
     console.log("uid: ", uid);
 
     const customToken = await admin.auth().createCustomToken(uid);
-    console.log("customToken: ", customToken);
-
-    // console.log('app to sign into is: ', app);
+    // console.log("**signInWithServiceAccount** customToken: ", customToken);
 
     const auth = getAuth(app);
     // console.log('got auth: ', auth);
@@ -101,7 +100,7 @@ export async function getDb(): Promise<Firestore> {
 
     const newIdToken = await auth.currentUser?.getIdToken();
     console.info("**getDb** got id token with lenght of: ", newIdToken?.length ?? "no id token");
-    
+
     if (newIdToken) {
         const firebaseApp = getFirebaseApp();
 

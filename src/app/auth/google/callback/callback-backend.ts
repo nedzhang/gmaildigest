@@ -1,7 +1,7 @@
 'use server'
 
 import { processGoogleOAuth2Callback } from "@/lib/oauth2-util";
-import { updateUserOAuthToken } from "@/lib/firestore-util";
+import { updateUserLatestToken } from "@/lib/gduser-util";
 
 import { getSession } from "@/lib/session";
 
@@ -18,7 +18,7 @@ export async function googleOAuth2Callback(callbackUrl: string, code: string): P
       throw new Error('**googleOAuth2Callback** User email not found in token payload');
     } else {
       
-      await updateUserOAuthToken(userAuthToken);
+      await updateUserLatestToken(userAuthToken);
 
       // const cookieStore = await cookies();
       // const session = await getIronSession(cookieStore, sessionOptions);

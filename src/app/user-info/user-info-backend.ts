@@ -1,6 +1,6 @@
 'use server';
 
-import { getUser, updateUser } from "@/lib/firestore-util";
+import { getUser, updateUser } from "@/lib/gduser-util";
 import { getSession } from "@/lib/session";
 import { UserSecurityProfile } from "@/types/firebase";
 

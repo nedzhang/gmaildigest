@@ -6,3 +6,8 @@ export function shallowCopyObjProperties(copyFrom: any, keysToKeep: string[]) {
             return acc;
         }, {});
 }
+
+export function reverseString(numString: string): string {
+    const reversedString = numString.split("").reverse().join("");
+    return reversedString;
+}

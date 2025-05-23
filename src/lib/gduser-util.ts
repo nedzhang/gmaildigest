@@ -4,7 +4,8 @@ import { collection, addDoc, doc, updateDoc, DocumentReference, DocumentData, se
 import { getDb } from "./firestore-auth";
 import { OAuthToken, OAuthTokenSchema, UserSecurityProfile, UserSecurityProfileSchema } from "@/types/firebase";
 import { shallowCopyObjProperties } from "@/lib/object-util";
-import { EmailAbstract, EmailAbstractSchema, GmailMessage } from "@/types/gmail";
+import { StandardEmail, StandardEmailSchema, GmailMessage, StandardEmailThread, StandardEmailThreadSchema } from "@/types/gmail";
+import logger from '@/lib/logger';
 
 /** Prefix for Firestore collection names based on environment configuration */
 const PROJ_PREFIX = process.env.PROJECT_CODE;
@@ -46,15 +47,17 @@ function addExpirationTimestamps(tokens: OAuthToken): OAuthToken {
  * @param tokenId - ID of the token document to update
  * @param tokenSet - New token data to store
  */
-export async function updateToken(userId: string, tokenId: string, tokenSet: OAuthToken): Promise<void> {
+export async function updateToken(userId: string, tokenId: string, tokenSet: OAuthToken): Promise<OAuthToken> {
     if (!tokenSet) throw new Error("Missing token data");
     
     const db = await getDb();
     const tokenDoc = doc(collection(db, getCollectionName('users'), userId, 'tokens'), tokenId);
     const updatedTokens = addExpirationTimestamps(tokenSet);
     
-    console.info(`Updating token for user ${userId}, token ${tokenId}`);
+    logger.info(`Updating token for user ${userId}, token ${tokenId}`);
     await updateDoc(tokenDoc, updatedTokens);
+
+    return updatedTokens;
 }
 
 /**
@@ -62,19 +65,19 @@ export async function updateToken(userId: string, tokenId: string, tokenSet: OAu
  * @param tokenSet - Complete OAuth token data with user payload
  * @throws Error if token payload is missing email
  */
-export async function updateUserLatestToken(tokenSet: OAuthToken): Promise<void> {
+export async function updateUserLatestToken(tokenSet: OAuthToken): Promise<OAuthToken> {
     const userEmail = tokenSet.payload?.email;
     if (!userEmail) throw new Error("User email missing in token payload");
     
     const db = await getDb();
-    const enhancedToken = addExpirationTimestamps(tokenSet);
+    const updatedToken = addExpirationTimestamps(tokenSet);
     
     // Create references to user document and tokens collection
     const userDoc = doc(db, getCollectionName('users'), userEmail);
     const tokensCollection = collection(db, getCollectionName('users'), userEmail, 'tokens');
     
     // Add new token document
-    const tokenDoc = await addDoc(tokensCollection, enhancedToken);
+    const tokenDoc = await addDoc(tokensCollection, updatedToken);
     await updateDoc(tokenDoc, { db_id: tokenDoc.id });
     
     // Update user document metadata
@@ -83,6 +86,8 @@ export async function updateUserLatestToken(tokenSet: OAuthToken): Promise<void>
         latest_token_id: tokenDoc.id,
         updated: Date.now() 
     }, { merge: true });
+
+    return updatedToken;
 }
 
 /**
@@ -142,10 +147,10 @@ export async function getUser(userId: string): Promise<UserSecurityProfile | und
     return userData;
 }
 
-export async function getEmailAbstract(userId: string, emailId:string): Promise<EmailAbstract | undefined> {
+export async function getEmailAbstract(userId: string, emailId:string): Promise<StandardEmail | undefined> {
     const db = await getDb();
 
-    const emailDocRef = doc(db, getCollectionName('users'), userId, 'emailass', emailId);
+    const emailDocRef = doc(db, getCollectionName('users'), userId, 'emailabs', emailId);
 
     if (!emailDocRef) return undefined;
 
@@ -153,21 +158,61 @@ export async function getEmailAbstract(userId: string, emailId:string): Promise<
 
     if (!emailDocSnap.exists()) return undefined;
 
-    return EmailAbstractSchema.parse(await emailDocSnap.data());
+    return StandardEmailSchema.parse(await emailDocSnap.data());
 }
 
 export async function setEmailAbstract(
     userId: string,
     emailId: string,
-    data: Partial<EmailAbstract>
+    data: StandardEmail
   ): Promise<void> {
     const db = await getDb();
   
-    const emailDocRef = doc(db, getCollectionName('users'), userId, 'emailass', emailId);
+    const emailDocRef = doc(db, getCollectionName('users'), userId, 'emailabs', emailId);
   
     // Validate and sanitize input using the schema (optional fields already handled)
-    const parsedData = EmailAbstractSchema.partial().parse(data);
+    const parsedData = StandardEmailSchema.partial().parse(data);
   
     // Create or update document with merge
     await setDoc(emailDocRef, parsedData, { merge: true });
+  }
+
+
+  
+export async function getThreadAbstract(userId: string, threadKey:string): Promise<StandardEmailThread | undefined> {
+    const db = await getDb();
+
+    const threadDocRef = doc(db, getCollectionName('users'), userId, 'threadabs', threadKey);
+
+    if (!threadDocRef) return undefined;
+
+    const threadDocSnap = await getDoc(threadDocRef);
+
+    if (!threadDocSnap.exists()) return undefined;
+
+    return StandardEmailThreadSchema.parse(await threadDocSnap.data());
+}
+
+export async function setThreadAbstract(
+    userId: string,
+    threadKey: string,
+    data: StandardEmailThread,
+  ): Promise<void> {
+    const db = await getDb();
+    
+    logger.debug(`**setThreadAbstract** userId: ${userId}, threadKey: ${threadKey}`);
+
+    const threadDocRef = doc(db, getCollectionName('users'), userId, 'threadabs', threadKey);
+    
+    // Limit the data to only the properties we want to save to db. We are not saving each messages in the thread because they are save in emailabs colleciton
+    const limitedData = shallowCopyObjProperties(data, ['dbThreadKey', 'summary', 'messageIds', 'snippet']);
+
+    logger.debug(`**setThreadAbstract** limitedData: ${JSON.stringify(limitedData)}`);
+
+    // Validate and sanitize input using the schema (optional fields already handled)
+    const parsedData = StandardEmailThreadSchema.partial().parse(limitedData);
+    
+    logger.debug(`**setThreadAbstract** parsedData: ${JSON.stringify(parsedData)}`)
+    // Create or update document with merge
+    await setDoc(threadDocRef, parsedData, { merge: true });
   }

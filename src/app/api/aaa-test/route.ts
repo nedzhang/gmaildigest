@@ -1,23 +1,63 @@
 import { getUser } from "@/lib/gduser-util";
-import { GRestErrorSchema } from "@/types/gmail";
+import { GmailThread, GRestErrorSchema } from "@/types/gmail";
 import { googleAI } from "@genkit-ai/googleai";
 import { genkit } from "genkit";
 import { NextResponse } from "next/server";
 
+import gmailThread from "../../../../email-store/thread-196f373962a23259.json"
+import { hydrateThread, parseGmailMessage } from "@/lib/stdmail-util";
+import { summarizeAttachment } from "@/ai/flows/summarize-attachment";
+
+import { promises as fs } from "fs";
+import path from "path";
+import logger from "@/lib/logger";
 
 
 export async function GET() {
     
     // return testSafeParse();
 
-    return getGenKitModels();
+    // return getGenKitModels();
 
-    
+    // return await testSummarizeAttachment();
 
-    const user = await getUser("ned.zhang@paracognition.ai");
-    // console.log("**aaa-test** getUser: ", user);
+    return await testHydrateEmailThread();
 
-    return NextResponse.json(user);
+    // const user = await getUser("ned.zhang@paracognition.ai");
+    // // logger.info("**aaa-test** getUser: ", user);
+
+    // return NextResponse.json(user);
+}
+
+async function testHydrateEmailThread() {
+
+    const outfilepath = path.join(process.cwd(), "email-store", "thread-196e98bc041bf1fc.json");
+
+    const gthread = await fs.readFile(outfilepath, "utf-8");
+
+    const gmailThread:GmailThread = JSON.parse(gthread);
+
+    const fullThread = await hydrateThread("ned.zhang@paracognition.ai", gmailThread);
+
+    return NextResponse.json(fullThread);
+}
+
+async function  testSummarizeAttachment() {
+
+    // gmailThread.messages[0].payload
+
+    const stdEmail = await parseGmailMessage("ned.zhang@paracognition.ai", gmailThread.messages[0], true);
+
+    // logger.info("**testSummarizeAttachment** stdEmail:", stdEmail);
+
+    const outfilepath = path.join(process.cwd(), "email-store", "stdEmail.json");
+    await fs.writeFile(outfilepath, JSON.stringify(stdEmail, null, 2));
+
+    const summary = await summarizeAttachment(stdEmail.attachments![0]);
+
+    stdEmail.attachments![0].summary = summary.summary;
+
+    return NextResponse.json(summary);
 }
 
 function getGenKitModels() {
@@ -100,5 +140,5 @@ function testSafeParse() {
 
     const parseResult = GRestErrorSchema.safeParse(response);
 
-    console.log("**testSafeParse** parseResult: ", parseResult);
+    logger.info("**testSafeParse** parseResult: ", parseResult);
 }

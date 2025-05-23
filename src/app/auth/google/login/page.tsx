@@ -3,9 +3,10 @@
 import { useEffect } from 'react';
 import { createOAuthUrl } from '@/lib/oauth2-util';
 import { makeCallBackUrl } from '@/lib/client-util';
+import logger from '@/lib/logger';
 
 const GoogleLoginPage = () => {
-  console.log("**GoogleLoginPage**");
+  logger.debug("**GoogleLoginPage**");
 
 
   if (typeof window !== 'undefined') {
@@ -16,7 +17,7 @@ const GoogleLoginPage = () => {
     // const callbackUrl = makeCallBackUrl({"requestUrl": currentUrl});
     const callbackUrl = makeCallBackUrl();
 
-    console.info("**GoogleLoginPage** callbackUrl: ", callbackUrl);
+    logger.info("**GoogleLoginPage** callbackUrl: ", callbackUrl);
 
     useEffect(() => {
       const redirectToOAuth = async () => {
@@ -26,7 +27,7 @@ const GoogleLoginPage = () => {
             scopes: ["https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/gmail.readonly"],
           });
 
-        console.log("**GoogleLoginPage** googleOauth2Url: ", googleOauth2Url);
+        logger.debug("**GoogleLoginPage** googleOauth2Url: ", googleOauth2Url);
 
         window.location.replace(googleOauth2Url);
       };

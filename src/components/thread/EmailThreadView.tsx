@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GmailThread, PayloadPart } from '@/types/gmail'; // Adjust the import path as necessary
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'; // Adjust the import path as necessary
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'; // Adjust the import path as necessary
+import logger from '@/lib/logger';
 
 interface EmailThreadViewProps {
   thread: GmailThread;
@@ -15,7 +16,7 @@ const decodeBase64 = (base64: string): string => {
   try {
     return atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
   } catch (e) {
-    console.error("Failed to decode base64:", e);
+    logger.error("Failed to decode base64:", e);
     return "Error decoding content.";
   }
 };

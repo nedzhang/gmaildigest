@@ -4,6 +4,7 @@ import { processGoogleOAuth2Callback } from "@/lib/oauth2-util";
 import { updateUserLatestToken } from "@/lib/gduser-util";
 
 import { getSession } from "@/lib/session";
+import logger from "@/lib/logger";
 
 
 export async function googleOAuth2Callback(callbackUrl: string, code: string): Promise<void> {
@@ -27,7 +28,7 @@ export async function googleOAuth2Callback(callbackUrl: string, code: string): P
       session.userEmail = email;
       session.isLoggedIn = true;
       await session.save();
-      console.log('**googleOAuth2Callback** session saved: ', session);
+      logger.info('**googleOAuth2Callback** session saved: ', session);
 
     }
   }

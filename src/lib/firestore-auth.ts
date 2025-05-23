@@ -12,6 +12,7 @@ import { Auth, getAuth, signInWithCustomToken, UserCredential } from "firebase/a
 import { FirebaseServiceAccount } from "@/types/firebase";
 
 import SERVICE_ACCOUNT from "../../secret/firebase-admin-service-account.json";
+import logger from "./logger";
 
 const firebaseConfig = {
     apiKey: process.env.FIREBASE_API_KEY,
@@ -52,13 +53,13 @@ function getFirebaseApp(): FirebaseApp {
 async function signInWithServiceAccount(app: FirebaseApp, cred: FirebaseServiceAccount): Promise<{ auth: Auth, userCred: UserCredential }> {
 
     const uid = cred.client_email;
-    console.log("uid: ", uid);
+    logger.debug("uid: ", uid);
 
     const customToken = await admin.auth().createCustomToken(uid);
-    // console.log("**signInWithServiceAccount** customToken: ", customToken);
+    // logger.debug("**signInWithServiceAccount** customToken: ", customToken);
 
     const auth = getAuth(app);
-    // console.log('got auth: ', auth);
+    // logger.debug('got auth: ', auth);
 
     // Sign in with custom token
     const userCred = await signInWithCustomToken(auth, customToken);
@@ -93,13 +94,13 @@ export async function getDb(): Promise<Firestore> {
         const { auth: newAuth, userCred: newUserCred } = await signIn();
         auth = newAuth;
         userCred = newUserCred;
-        // console.log("**getDb* we have auth and userCred now: ", auth, "\nuserCred:", userCred);
+        // logger.debug("**getDb* we have auth and userCred now: ", auth, "\nuserCred:", userCred);
     }
 
-    // console.info("**getDb** got auth: ", auth)
+    // logger.info("**getDb** got auth: ", auth)
 
     const newIdToken = await auth.currentUser?.getIdToken();
-    console.info("**getDb** got id token with lenght of: ", newIdToken?.length ?? "no id token");
+    logger.info("**getDb** got id token with lenght of: ", newIdToken?.length ?? "no id token");
 
     if (newIdToken) {
         const firebaseApp = getFirebaseApp();

@@ -6,6 +6,7 @@ import { retrieveUserThreads } from '@/lib/gmail-util'; // Assuming this functio
 import EmailThreadView from '@/components/thread/EmailThreadView';
 import { getSession } from '@/lib/session';
 import { getCurrentUserEmailThread } from './backend';
+import logger from '@/lib/logger';
 
 const UserThreadsPage = () => {
   const [threads, setThreads] = useState<GmailThread[]>([]);
@@ -18,17 +19,17 @@ const UserThreadsPage = () => {
         setLoading(true);
         // Call the function to retrieve threads for the specified user
         const userThreads = await getCurrentUserEmailThread();
-        console.log("**gthreads** userThreads:", userThreads);
+        logger.debug("**gthreads** userThreads:", userThreads);
         if (!userThreads) {
           setError('**gthreads** No threads found for this user.');
           setLoading(false);
           return;
         }
-        console.log("**UserThreadsPage** userThreads: ", userThreads)
+        logger.debug("**UserThreadsPage** userThreads: ", userThreads)
         setThreads(userThreads);
       } catch (err) {
         setError('Failed to load email threads.');
-        console.error(err);
+        logger.error(err);
       } finally {
         setLoading(false);
       }

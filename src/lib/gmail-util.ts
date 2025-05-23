@@ -4,7 +4,16 @@ import { getUser } from "@/lib/gduser-util";
 import { GmailThread, GmailThreadList, GmailThreadListSchema, GmailThreadSchema, GRestErrorSchema } from "@/types/gmail";
 import { getAccessToken } from "./oauth2-util";
 
+const GOOGLE_API_URL = 'https://www.googleapis.com/gmail/v1';
 
+/**
+ * Checks if a response from Google API is a error.
+ * It does not verify the object is the correct type <T>, only to cast it as T. 
+ * @param response - Response from Gmail API
+ * @returns GmailThreadList if valid, throws error if not
+ * @throws Error if response is a GRestError
+ * 
+ */
 function checkGRestResponse<T>(response: any):T {
 
     const { success, error, data} = GRestErrorSchema.safeParse(response)
@@ -23,7 +32,7 @@ function checkGRestResponse<T>(response: any):T {
  * @returns Promise resolving to GmailThreadList
  */
 async function listThreads(accessToken: string, userId: string): Promise<GmailThreadList> {
-    const response = await fetch(`https://www.googleapis.com/gmail/v1/users/${userId}/threads`, {
+    const response = await fetch(`${GOOGLE_API_URL}/users/${userId}/threads`, {
         headers: { Authorization: `Bearer ${accessToken}` }
     });
     // return response.json();
@@ -38,7 +47,7 @@ async function listThreads(accessToken: string, userId: string): Promise<GmailTh
  * @returns Promise resolving to GmailThread
  */
 async function getThread(accessToken: string, userId: string, threadId: string): Promise<GmailThread> {
-    const response = await fetch(`https://www.googleapis.com/gmail/v1/users/${userId}/threads/${threadId}`, {
+    const response = await fetch(`${GOOGLE_API_URL}/users/${userId}/threads/${threadId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
     });
     return checkGRestResponse<GmailThread>(await response.json());
@@ -75,10 +84,17 @@ export async function retrieveUserThreads(userId: string): Promise<GmailThread[]
     );
 }
 
+/**
+ * Retrieves a single email attachment
+ * @param userId - User ID to authenticate request and also the email address
+ * @param emailId - ID of the email containing the attachment
+ * @param attachmentId - ID of the attachment to retrieve
+ * @returns Promise resolving to requested attachment or undefined if not found
+ */
 export async function getAttachment(userId: string, emailId: string, attachmentId: string): Promise< {size:string, data:string} | undefined> {
     const access_token = await getAccessToken(userId);
     
-    const response = await fetch(`https://www.googleapis.com/gmail/v1/users/${userId}/messages/${emailId}/attachments/${attachmentId}`, {
+    const response = await fetch(`${GOOGLE_API_URL}/users/${userId}/messages/${emailId}/attachments/${attachmentId}`, {
         headers: { Authorization: `Bearer ${access_token}` }
     });
 

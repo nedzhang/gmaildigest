@@ -1,4 +1,5 @@
 'use client';
+import logger from "@/lib/logger";
 
 /**
  * Creates a callback URL for Google OAuth, including optional query parameters.
@@ -35,5 +36,5 @@ export function makeCallBackUrl(parameters?: { [key: string]: string }): string 
 //     const currentUrlOrigin = new URL(currentUrl).origin;    // const callbackUrl = `${currentUrlOrigin}/auth/google/callback?requestUrl=${encodeURIComponent(currentUrl)}`;
 //     const callbackUrl = `${currentUrlOrigin}/auth/google/callback`;
 
-//     console.info("**GoogleLoginPage** callbackUrl: ", callbackUrl);
+//     logger.debug("**GoogleLoginPage** callbackUrl: ", callbackUrl);
 // }

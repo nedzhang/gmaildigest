@@ -7,8 +7,9 @@ import { z } from 'zod';
 // and you have imported it correctly.
 // Example:
 import { GmailThreadSchema } from '@/types/gmail';
-import { retrieveThread, retrieveUserThreads } from '@/lib/gmail-util';
+import { retrieveThread } from '@/lib/gmail-util';
 import { getSession } from '@/lib/session';
+import logger from "@/lib/logger";
 
 export async function GET(
   request: Request,
@@ -47,7 +48,7 @@ export async function GET(
       return NextResponse.json({ error: 'Data validation failed', details: error.errors }, { status: 400 });
     }
 
-    console.error('Error processing thread:', error);
+    logger.error('Error processing thread:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

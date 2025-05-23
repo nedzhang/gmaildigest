@@ -12,6 +12,9 @@ import {
 import { promises as fs } from 'fs';
 import path from 'path';
 import EmailThreadView from '@/components/thread/EmailThreadView';
+
+import { logger } from '@/lib/logger';
+
 interface PageProps {
   params: {
     threadId: string;
@@ -22,7 +25,7 @@ interface PageProps {
 //   try {
 //     return Buffer.from(base64, 'base64').toString('utf-8');
 //   } catch (error) {
-//     console.error('Error decoding base64:', error);
+//     logger.error('Error decoding base64:', error);
 //     return 'Error decoding content.';
 //   }
 // };
@@ -86,7 +89,7 @@ export default function ThreadPage() {
         setThread(data as GmailThread);
       } catch (err) {
         setError('Failed to load email thread.');
-        console.error(err);
+        logger.error(err);
       } finally {
         setLoading(false);
       }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { makeCallBackUrl } from '@/lib/client-util';
 import { googleOAuth2Callback } from './callback-backend';
+import logger from '@/lib/logger';
 
 /**
  * Google OAuth2 callback page component
@@ -37,7 +38,7 @@ const GoogleCallbackPage = () => {
         setLoading(false);
         
       } catch (error) {
-        console.error('OAuth processing failed:', error);
+        logger.error('OAuth processing failed:', error);
         const message = error instanceof Error ? error.message : 'Unknown error occurred';
         window.location.replace(`/auth/error?message=${encodeURIComponent(message)}`);
       }

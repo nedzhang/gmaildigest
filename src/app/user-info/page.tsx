@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { getCurrentUserProfile, updateUserProfile } from './user-info-backend';
 import { UserSecurityProfile } from '@/types/firebase';
+import logger from '@/lib/logger';
 
 // interface OAuthToken {
 //   accessToken: string;
@@ -50,7 +51,7 @@ const UserInfoPage = () => {
         const userData = await getCurrentUserProfile();
         setUser(userData);
       } catch (error) {
-        console.error("**UserInfoPage** Error fetching user data:", error);
+        logger.error("**UserInfoPage** Error fetching user data:", error);
       } finally {
         setLoading(false);
       }
@@ -64,13 +65,13 @@ const UserInfoPage = () => {
   };
 
   const handleSave = async () => {
-    console.log("Saving user data:", user);
+    logger.debug("Saving user data:", user);
     if (user) {
 
       try {
         await updateUserProfile(user);
       } catch (error) {
-        console.error("**handleSave** Error saving user data:", error);
+        logger.error("**handleSave** Error saving user data:", error);
       }
       finally {
         setLoading(false);

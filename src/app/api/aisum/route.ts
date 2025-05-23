@@ -1,7 +1,7 @@
 import * as genkit from '@genkit-ai/core';
 import { generate } from '@genkit-ai/ai';
 import fs from 'fs';
-import { EmailAbstract, GmailMessage, GmailThread, PayloadPart } from '@/types/gmail';
+import { StandardEmail, GmailMessage, GmailThread, PayloadPart } from '@/types/gmail';
 import { getAttachment } from '@/lib/gmail-util';
 import { getSession } from '@/lib/session';
 import { NextDataPathnameNormalizer } from 'next/dist/server/normalizers/request/next-data';
@@ -9,6 +9,8 @@ import { NextResponse } from 'next/server';
 import { decodeUnicodeEscapes } from '@/lib/string-util';
 import { getEmailAbstract } from '@/lib/gduser-util';
 import { summarizeEmail } from '@/ai/flows/summarize-email-thread'
+import path from 'path';
+import logger from '@/lib/logger';
 
 
 const testThread: GmailThread = {
@@ -278,7 +280,7 @@ async function collectPartsInAMessage(
 
         if (attachment) {
             data = attachment.data;
-            console.info(
+            logger.info(
                 `Processed attachment: ${part.filename}, Size: ${attachment.size} bytes`
             );
         }
@@ -311,27 +313,27 @@ async function selectEmailParts(
     });
   }
 
-async function summarizeMessage(userId: string, messageAbstract: EmailAbstract): Promise<EmailAbstract> {
+async function summarizeMessage(userId: string, messageAbstract: StandardEmail): Promise<StandardEmail> {
     
     const emailAbs = await getEmailAbstract(userId, messageAbstract.messageId!);
     
-    console.log("**summarizeMessage** emailAbs:", emailAbs);
+    logger.debug("**summarizeMessage** emailAbs:", emailAbs);
 
     if (emailAbs) { // We have already summerized the email. get it from the database.
         return emailAbs;
     } else { // this email has not been summarized yet. 
         // messageAbstract.parts?.splice(0,2);
-        console.log('messageAbstract is now: ', messageAbstract);
-        console.log("**summarizeMessage** Start summariziation");
+        logger.debug('messageAbstract is now: ', messageAbstract);
+        logger.debug("**summarizeMessage** Start summariziation");
         const result = await summarizeEmail(messageAbstract);
-        console.log("**summarizeMessage** End summariziation");
-        console.log("**summarizeMessage** result: ", result);
+        logger.debug("**summarizeMessage** End summariziation");
+        logger.debug("**summarizeMessage** result: ", result);
         return result;
     }
 
 }
 
-async function processMessage(userId: string, message: GmailMessage): Promise<EmailAbstract>{
+async function processMessage(userId: string, message: GmailMessage): Promise<StandardEmail>{
 
     //convert header from an array to a dict
     const headerDictionary = message.payload?.headers?.reduce<Record<string, string>>(
@@ -344,7 +346,7 @@ async function processMessage(userId: string, message: GmailMessage): Promise<Em
         {}
     ) || {};
 
-    console.log("from: ", headerDictionary['from']);
+    logger.debug("from: ", headerDictionary['from']);
     
     const messageData = {
         messageId: message.id,
@@ -368,10 +370,12 @@ async function processMessage(userId: string, message: GmailMessage): Promise<Em
 
 async function processEmailThread(userId:string, thread: GmailThread) {
     
+    // @refresh reset
+
     return await Promise.all(
-        thread.messages.map(async (message) => (
-            await processMessage(userId, message)))
-    );
+        thread.messages.map(async (message) => {
+            await processMessage(userId, message)
+        }));
 }
 
 
@@ -403,7 +407,7 @@ export async function GET(request: Request) {
         return NextResponse.json(neoMessages);
 
     } catch (error) {
-        console.error('Thread processing failed:', error);
+        logger.error('Thread processing failed:', error);
         return NextResponse.json(
             { error: 'Failed to process email thread' },
             { status: 500 }

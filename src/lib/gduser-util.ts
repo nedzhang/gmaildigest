@@ -1,11 +1,32 @@
-'use server';
+"use server";
 
-import { collection, addDoc, doc, updateDoc, DocumentReference, DocumentData, setDoc, getDoc, getDocs } from "firebase/firestore";
+import {
+    addDoc,
+    collection,
+    doc,
+    DocumentData,
+    DocumentReference,
+    getDoc,
+    getDocs,
+    setDoc,
+    updateDoc,
+} from "firebase/firestore";
 import { getDb } from "./firestore-auth";
-import { OAuthToken, OAuthTokenSchema, UserSecurityProfile, UserSecurityProfileSchema } from "@/types/firebase";
+import {
+    OAuthToken,
+    OAuthTokenSchema,
+    UserSecurityProfile,
+    UserSecurityProfileSchema,
+} from "@/types/firebase";
 import { shallowCopyObjProperties } from "@/lib/object-util";
-import { StandardEmail, StandardEmailSchema, GmailMessage, StandardEmailThread, StandardEmailThreadSchema } from "@/types/gmail";
-import logger from '@/lib/logger';
+import {
+    GmailMessage,
+    StandardEmail,
+    StandardEmailSchema,
+    StandardEmailThread,
+    StandardEmailThreadSchema,
+} from "@/types/gmail";
+import logger, { LogContext, makeLogContext, makeLogEntry } from "@/lib/logger";
 
 /** Prefix for Firestore collection names based on environment configuration */
 const PROJ_PREFIX = process.env.PROJECT_CODE;
@@ -17,7 +38,9 @@ const PROJ_PREFIX = process.env.PROJECT_CODE;
  * @throws Error if project prefix is not configured
  */
 function getCollectionName(objectName: string): string {
-    if (!PROJ_PREFIX) throw new Error("Project code environment variable not configured");
+    if (!PROJ_PREFIX) {
+        throw new Error("Project code environment variable not configured");
+    }
     return `${PROJ_PREFIX}#${objectName}`;
 }
 
@@ -29,15 +52,19 @@ function getCollectionName(objectName: string): string {
 function addExpirationTimestamps(tokens: OAuthToken): OAuthToken {
     const now = Math.floor(Date.now() / 1000);
     const enhancedTokens = { ...tokens };
-    
+
     if (tokens.expires_in && !enhancedTokens.expires_at) {
         enhancedTokens.expires_at = now + tokens.expires_in;
     }
-    
-    if (tokens.refresh_token_expires_in && !enhancedTokens.refresh_token_expires_at) {
-        enhancedTokens.refresh_token_expires_at = now + tokens.refresh_token_expires_in;
+
+    if (
+        tokens.refresh_token_expires_in &&
+        !enhancedTokens.refresh_token_expires_at
+    ) {
+        enhancedTokens.refresh_token_expires_at = now +
+            tokens.refresh_token_expires_in;
     }
-    
+
     return enhancedTokens;
 }
 
@@ -47,13 +74,21 @@ function addExpirationTimestamps(tokens: OAuthToken): OAuthToken {
  * @param tokenId - ID of the token document to update
  * @param tokenSet - New token data to store
  */
-export async function updateToken(userId: string, tokenId: string, tokenSet: OAuthToken): Promise<OAuthToken> {
+export async function updateToken(
+    logContext: LogContext,
+    userId: string,
+    tokenId: string,
+    tokenSet: OAuthToken,
+): Promise<OAuthToken> {
     if (!tokenSet) throw new Error("Missing token data");
-    
-    const db = await getDb();
-    const tokenDoc = doc(collection(db, getCollectionName('users'), userId, 'tokens'), tokenId);
+
+    const db = await getDb(logContext);
+    const tokenDoc = doc(
+        collection(db, getCollectionName("users"), userId, "tokens"),
+        tokenId,
+    );
     const updatedTokens = addExpirationTimestamps(tokenSet);
-    
+
     logger.info(`Updating token for user ${userId}, token ${tokenId}`);
     await updateDoc(tokenDoc, updatedTokens);
 
@@ -65,26 +100,34 @@ export async function updateToken(userId: string, tokenId: string, tokenSet: OAu
  * @param tokenSet - Complete OAuth token data with user payload
  * @throws Error if token payload is missing email
  */
-export async function updateUserLatestToken(tokenSet: OAuthToken): Promise<OAuthToken> {
+export async function updateUserLatestToken(
+    logContext: LogContext,
+    tokenSet: OAuthToken,
+): Promise<OAuthToken> {
     const userEmail = tokenSet.payload?.email;
     if (!userEmail) throw new Error("User email missing in token payload");
-    
-    const db = await getDb();
+
+    const db = await getDb(logContext);
     const updatedToken = addExpirationTimestamps(tokenSet);
-    
+
     // Create references to user document and tokens collection
-    const userDoc = doc(db, getCollectionName('users'), userEmail);
-    const tokensCollection = collection(db, getCollectionName('users'), userEmail, 'tokens');
-    
+    const userDoc = doc(db, getCollectionName("users"), userEmail);
+    const tokensCollection = collection(
+        db,
+        getCollectionName("users"),
+        userEmail,
+        "tokens",
+    );
+
     // Add new token document
     const tokenDoc = await addDoc(tokensCollection, updatedToken);
     await updateDoc(tokenDoc, { db_id: tokenDoc.id });
-    
+
     // Update user document metadata
-    await setDoc(userDoc, { 
+    await setDoc(userDoc, {
         login_email: userEmail,
         latest_token_id: tokenDoc.id,
-        updated: Date.now() 
+        updated: Date.now(),
     }, { merge: true });
 
     return updatedToken;
@@ -95,21 +138,24 @@ export async function updateUserLatestToken(tokenSet: OAuthToken): Promise<OAuth
  * @param user - User profile data to update
  * @throws Error if user email is missing
  */
-export async function updateUser(user: UserSecurityProfile): Promise<void> {
+export async function updateUser(
+    logContext: LogContext,
+    user: UserSecurityProfile,
+): Promise<void> {
     if (!user.login_email) throw new Error("User email required for update");
-    
-    const db = await getDb();
-    const userDoc = doc(db, getCollectionName('users'), user.login_email);
+
+    const db = await getDb(logContext);
+    const userDoc = doc(db, getCollectionName("users"), user.login_email);
     const userUpdate = shallowCopyObjProperties(user, [
-        'full_name',
-        'preferred_name',
-        'communication_email',
-        'email_verified'
+        "full_name",
+        "preferred_name",
+        "communication_email",
+        "email_verified",
     ]);
-    
+
     userUpdate.updated = Date.now();
     userUpdate.accessed = Date.now();
-    
+
     await updateDoc(userDoc, userUpdate);
 }
 
@@ -118,21 +164,24 @@ export async function updateUser(user: UserSecurityProfile): Promise<void> {
  * @param userId - id of the user to retrieve
  * @returns Complete user profile or null if not found
  */
-export async function getUser(userId: string): Promise<UserSecurityProfile | undefined> {
-    const db = await getDb();
-    const userDocRef = doc(db, getCollectionName('users'), userId);
+export async function getUser(
+    logContext: LogContext,
+    userId: string,
+): Promise<UserSecurityProfile | undefined> {
+    const db = await getDb(logContext);
+    const userDocRef = doc(db, getCollectionName("users"), userId);
     const userDocSnap = await getDoc(userDocRef);
-    
+
     if (!userDocSnap.exists()) return undefined;
-    
+
     // Parse base user document
     const userData = UserSecurityProfileSchema.parse(await userDocSnap.data());
-    
+
     // Retrieve and process associated tokens
     const tokensSnap = await getDocs(
-        collection(db, getCollectionName('users'), userId, 'tokens')
+        collection(db, getCollectionName("users"), userId, "tokens"),
     );
-    
+
     const tokens = await Promise.all(
         tokensSnap.docs.map(async (doc) => {
             const tokenData = OAuthTokenSchema.parse(await doc.data());
@@ -140,17 +189,27 @@ export async function getUser(userId: string): Promise<UserSecurityProfile | und
                 userData.latest_token = tokenData;
             }
             return tokenData;
-        })
+        }),
     );
-    
+
     userData.tokens = tokens;
     return userData;
 }
 
-export async function getEmailAbstract(userId: string, emailId:string): Promise<StandardEmail | undefined> {
-    const db = await getDb();
+export async function getEmailAbstract(
+    logContext: LogContext,
+    userId: string,
+    emailId: string,
+): Promise<StandardEmail | undefined> {
+    const db = await getDb(logContext);
 
-    const emailDocRef = doc(db, getCollectionName('users'), userId, 'emailabs', emailId);
+    const emailDocRef = doc(
+        db,
+        getCollectionName("users"),
+        userId,
+        "emailabs",
+        emailId,
+    );
 
     if (!emailDocRef) return undefined;
 
@@ -162,27 +221,57 @@ export async function getEmailAbstract(userId: string, emailId:string): Promise<
 }
 
 export async function setEmailAbstract(
+    logContext: LogContext,
     userId: string,
     emailId: string,
-    data: StandardEmail
-  ): Promise<void> {
-    const db = await getDb();
-  
-    const emailDocRef = doc(db, getCollectionName('users'), userId, 'emailabs', emailId);
-  
+    data: StandardEmail,
+): Promise<void> {
+    const db = await getDb(logContext);
+
+    const emailDocRef = doc(
+        db,
+        getCollectionName("users"),
+        userId,
+        "emailabs",
+        emailId,
+    );
+
     // Validate and sanitize input using the schema (optional fields already handled)
     const parsedData = StandardEmailSchema.partial().parse(data);
-  
+
+    logger.info(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "gduser-util",
+            function: "setEmailAbstract",
+        },
+        {
+            messageId: parsedData.messageId,
+            subject: parsedData.subject,
+            snippet: parsedData.snippet,
+            summary: parsedData.summary,
+        },
+        `**setEmailAbstract** update emailAbs userId: ${userId}, emailId: ${emailId}`,
+    ));
     // Create or update document with merge
     await setDoc(emailDocRef, parsedData, { merge: true });
-  }
+}
 
+export async function getThreadAbstract(
+    logContext: LogContext,
+    userId: string,
+    threadKey: string,
+): Promise<StandardEmailThread | undefined> {
+    const db = await getDb(logContext);
 
-  
-export async function getThreadAbstract(userId: string, threadKey:string): Promise<StandardEmailThread | undefined> {
-    const db = await getDb();
-
-    const threadDocRef = doc(db, getCollectionName('users'), userId, 'threadabs', threadKey);
+    const threadDocRef = doc(
+        db,
+        getCollectionName("users"),
+        userId,
+        "threadabs",
+        threadKey,
+    );
 
     if (!threadDocRef) return undefined;
 
@@ -194,25 +283,49 @@ export async function getThreadAbstract(userId: string, threadKey:string): Promi
 }
 
 export async function setThreadAbstract(
+    logContext: LogContext,
     userId: string,
     threadKey: string,
     data: StandardEmailThread,
-  ): Promise<void> {
-    const db = await getDb();
-    
-    logger.debug(`**setThreadAbstract** userId: ${userId}, threadKey: ${threadKey}`);
+): Promise<void> {
+    const db = await getDb(logContext);
 
-    const threadDocRef = doc(db, getCollectionName('users'), userId, 'threadabs', threadKey);
-    
+    logger.debug(
+        `**setThreadAbstract** userId: ${userId}, threadKey: ${threadKey}`,
+    );
+
+    const threadDocRef = doc(
+        db,
+        getCollectionName("users"),
+        userId,
+        "threadabs",
+        threadKey,
+    );
+
     // Limit the data to only the properties we want to save to db. We are not saving each messages in the thread because they are save in emailabs colleciton
-    const limitedData = shallowCopyObjProperties(data, ['dbThreadKey', 'summary', 'messageIds', 'snippet']);
+    const limitedData = shallowCopyObjProperties(data, [
+        "dbThreadKey",
+        "summary",
+        "messageIds",
+        "snippet",
+    ]);
 
-    logger.debug(`**setThreadAbstract** limitedData: ${JSON.stringify(limitedData)}`);
+    // logger.trace(`**setThreadAbstract** limitedData: ${JSON.stringify(limitedData)}`);
 
     // Validate and sanitize input using the schema (optional fields already handled)
     const parsedData = StandardEmailThreadSchema.partial().parse(limitedData);
-    
-    logger.debug(`**setThreadAbstract** parsedData: ${JSON.stringify(parsedData)}`)
+
+    // logger.trace(`**setThreadAbstract** parsedData: ${JSON.stringify(parsedData)}`)
+    logger.debug(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "gduser-util",
+            function: "setThreadAbstract",
+        },
+        { parsedThreadAbs: parsedData },
+        `**setThreadAbstract** saving to DB user: ${userId} thread ${parsedData.dbThreadKey} for messages: ${JSON.stringify(parsedData.messageIds)}}`,
+    ));
     // Create or update document with merge
     await setDoc(threadDocRef, parsedData, { merge: true });
-  }
+}

@@ -1,11 +1,11 @@
 'use server';
 
 import { getUser, updateUser } from "@/lib/gduser-util";
-import logger from "@/lib/logger";
+import logger, { LogContext } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { UserSecurityProfile } from "@/types/firebase";
 
-export async function getCurrentUserProfile(): Promise<UserSecurityProfile> {
+export async function getCurrentUserProfile(logContext: LogContext): Promise<UserSecurityProfile> {
 
     const session = await getSession();
 
@@ -15,7 +15,7 @@ export async function getCurrentUserProfile(): Promise<UserSecurityProfile> {
 
         logger.debug("**getCurrentUserProfile** user session: ", session);
 
-        const userProfile = await getUser(session.userEmail);
+        const userProfile = await getUser(logContext, session.userEmail);
 
         if (!userProfile) {
             throw new Error('**getCurrentUserProfile** User profile not found');
@@ -27,7 +27,7 @@ export async function getCurrentUserProfile(): Promise<UserSecurityProfile> {
     }
 }
 
-export async function updateUserProfile(user: UserSecurityProfile):Promise<void> {
-    logger.debu("**updateUserProfile** user: ", user);
-    updateUser(user);
+export async function updateUserProfile(logContext: LogContext, user: UserSecurityProfile):Promise<void> {
+    logger.debug("**updateUserProfile** user: ", user);
+    updateUser(logContext, user);
 }

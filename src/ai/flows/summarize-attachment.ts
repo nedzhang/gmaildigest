@@ -9,6 +9,7 @@
  */
 
 import { ai } from "@/ai/genkit";
+import { base64UrlToBase64 } from "@/lib/string-util";
 import {
   StandardEmail,
   EmailAbstractAttachmentSchema,
@@ -23,6 +24,8 @@ const SummarizeAttachmentInputSchema = EmailAbstractAttachmentSchema.omit({
 
 type SummarizeAttacmentInput = z.infer<typeof SummarizeAttachmentInputSchema>;
 
+ai.defineSchema('AttachmentInput', SummarizeAttachmentInputSchema);
+
 const SummarizeAttachmentOutputSchema = z.object({
   summary: z.string().describe("A summary of the attachment."),
 });
@@ -30,6 +33,9 @@ const SummarizeAttachmentOutputSchema = z.object({
 export type SummarizeAttachmentOutput = z.infer<
   typeof SummarizeAttachmentOutputSchema
 >;
+
+ai.defineSchema('AttachmentOutput', SummarizeAttachmentOutputSchema);
+
 
 export async function summarizeAttachment(
   input: SummarizeAttacmentInput,
@@ -71,6 +77,12 @@ const summarizeAttachmentFlow = ai.defineFlow(
     outputSchema: SummarizeAttachmentOutputSchema,
   },
   async input => {
+    
+    // // the input.data should be base64 encoded string
+    // // but Googleapi returns base64url encoded. We need to change to base64 encoding
+    // if (input.data) {
+    //   input.data = base64UrlToBase64(input.data);
+    // }
     const { output } = await summarizeAttachmentPrompt(input)
     return output!;
   }

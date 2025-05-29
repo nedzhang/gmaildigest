@@ -3,6 +3,7 @@
 import { getUser } from "@/lib/gduser-util";
 import { GmailThread, GmailThreadList, GmailThreadListSchema, GmailThreadSchema, GRestErrorSchema } from "@/types/gmail";
 import { getAccessToken } from "./oauth2-util";
+import { LogContext } from "./logger";
 
 const GOOGLE_API_URL = 'https://www.googleapis.com/gmail/v1';
 
@@ -10,7 +11,7 @@ const GOOGLE_API_URL = 'https://www.googleapis.com/gmail/v1';
  * Checks if a response from Google API is a error.
  * It does not verify the object is the correct type <T>, only to cast it as T. 
  * @param response - Response from Gmail API
- * @returns GmailThreadList if valid, throws error if not
+ * @returns <T> if valid, throws error if not
  * @throws Error if response is a GRestError
  * 
  */
@@ -61,8 +62,8 @@ async function getThread(accessToken: string, userId: string, threadId: string):
  * @param threadId - ID of the thread to retrieve
  * @returns Promise resolving to requested GmailThread
  */
-export async function retrieveThread(userId: string, threadId: string): Promise<GmailThread> {
-    const access_token = await getAccessToken(userId);
+export async function retrieveThread(logContext: LogContext, userId: string, threadId: string): Promise<GmailThread> {
+    const access_token = await getAccessToken(logContext, userId);
     return getThread(access_token, userId, threadId);
 }
 
@@ -71,8 +72,8 @@ export async function retrieveThread(userId: string, threadId: string): Promise<
  * @param userId - User ID to authenticate request
  * @returns Promise resolving to array of GmailThreads or undefined if none found
  */
-export async function retrieveUserThreads(userId: string): Promise<GmailThread[] | undefined> {
-    const access_token = await getAccessToken(userId);
+export async function retrieveUserThreads(logContext: LogContext, userId: string): Promise<GmailThread[] | undefined> {
+    const access_token = await getAccessToken(logContext, userId);
     const { threads } = await listThreads(access_token, userId);
 
 
@@ -91,8 +92,8 @@ export async function retrieveUserThreads(userId: string): Promise<GmailThread[]
  * @param attachmentId - ID of the attachment to retrieve
  * @returns Promise resolving to requested attachment or undefined if not found
  */
-export async function getAttachment(userId: string, emailId: string, attachmentId: string): Promise< {size:string, data:string} | undefined> {
-    const access_token = await getAccessToken(userId);
+export async function getAttachment(logContext: LogContext, userId: string, emailId: string, attachmentId: string): Promise< {size:string, data:string} | undefined> {
+    const access_token = await getAccessToken(logContext, userId);
     
     const response = await fetch(`${GOOGLE_API_URL}/users/${userId}/messages/${emailId}/attachments/${attachmentId}`, {
         headers: { Authorization: `Bearer ${access_token}` }

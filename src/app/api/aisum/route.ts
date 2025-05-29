@@ -8,7 +8,7 @@ import { NextDataPathnameNormalizer } from 'next/dist/server/normalizers/request
 import { NextResponse } from 'next/server';
 import { decodeUnicodeEscapes } from '@/lib/string-util';
 import { getEmailAbstract } from '@/lib/gduser-util';
-import { summarizeEmail } from '@/ai/flows/summarize-email-thread'
+import { summarizeEmail } from '@/ai/flows/summarize-email'
 import path from 'path';
 import logger from '@/lib/logger';
 

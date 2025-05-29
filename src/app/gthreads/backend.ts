@@ -1,13 +1,13 @@
 'use server'
 
 import { retrieveUserThreads } from "@/lib/gmail-util";
-import logger from "@/lib/logger";
+import logger, { LogContext } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { GmailThread } from "@/types/gmail";
 import { promises as fs  } from "fs";
 import path from "path";
 
-export async function getCurrentUserEmailThread(): Promise<GmailThread[] | undefined> {
+export async function getCurrentUserEmailThread( requestId: string ): Promise<GmailThread[] | undefined> {
     const session = await getSession();
 
     if (!session.userEmail) {
@@ -15,7 +15,8 @@ export async function getCurrentUserEmailThread(): Promise<GmailThread[] | undef
     }
 
     // Call the function to retrieve threads for the specified user
-    const userThreads = await retrieveUserThreads(session.userEmail);
+    const userThreads = await retrieveUserThreads( 
+      { requestId,}, session.userEmail);
 
     // for testing purpose, we will store all the threads in file system 
     // in file email/thread.id.json
@@ -27,5 +28,6 @@ export async function getCurrentUserEmailThread(): Promise<GmailThread[] | undef
        logger.info(`**getCurrentUserEmailThread** Writing thread ${thread.id} to ${filePath}`);
        await fs.writeFile(filePath, fileContent);
     });
+    
     return userThreads;
 }

@@ -31,3 +31,8 @@ export function areStringListsEqual(a: string[], b: string[]): boolean {
 
   return sortedA.every((val, index) => val === sortedB[index]);
 }
+
+export function hasProperty(obj: object): boolean {
+
+  return !!obj && !(Object.keys(obj).length === 0);
+}

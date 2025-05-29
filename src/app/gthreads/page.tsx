@@ -1,4 +1,4 @@
-'use client';
+'use client'
 
 import { useEffect, useState } from 'react';
 import { GmailThread } from '@/types/gmail';
@@ -7,6 +7,10 @@ import EmailThreadView from '@/components/thread/EmailThreadView';
 import { getSession } from '@/lib/session';
 import { getCurrentUserEmailThread } from './backend';
 import logger from '@/lib/logger';
+import { headers } from 'next/headers';
+
+// get x-request-id from header
+const requestId = (await headers()).get('x-request-id') || '';
 
 const UserThreadsPage = () => {
   const [threads, setThreads] = useState<GmailThread[]>([]);
@@ -18,7 +22,7 @@ const UserThreadsPage = () => {
       try {
         setLoading(true);
         // Call the function to retrieve threads for the specified user
-        const userThreads = await getCurrentUserEmailThread();
+        const userThreads = await getCurrentUserEmailThread(requestId);
         logger.debug("**gthreads** userThreads:", userThreads);
         if (!userThreads) {
           setError('**gthreads** No threads found for this user.');

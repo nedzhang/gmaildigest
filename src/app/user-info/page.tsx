@@ -154,7 +154,7 @@ const UserInfoPage = () => {
                 <p><strong>Access Token:</strong> {token.access_token}</p>
                 <p><strong>Refresh Token:</strong> {token.refresh_token}</p>
                 <p><strong>Expiry In:</strong> {token.expires_in}</p>
-                <p><strong>Expiry Date:</strong> {new Date(token.payload.exp * 1000).toLocaleString()}</p>
+                <p><strong>Expiry Date:</strong> {new Date( (token.payload?.exp || 0) * 1000).toLocaleString()}</p>
               </li>
             ))}
           </ul>

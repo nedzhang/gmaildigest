@@ -2,7 +2,7 @@ import { getUser } from "@/lib/gduser-util";
 import { GmailThread, GRestErrorSchema } from "@/types/gmail";
 import { googleAI } from "@genkit-ai/googleai";
 import { genkit } from "genkit";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import gmailThread from "../../../../email-store/thread-196f373962a23259.json"
 import { hydrateThread, parseGmailMessage } from "@/lib/stdmail-util";
@@ -10,18 +10,25 @@ import { summarizeAttachment } from "@/ai/flows/summarize-attachment";
 
 import { promises as fs } from "fs";
 import path from "path";
-import logger from "@/lib/logger";
+import logger, { LogContext, makeLogEntry } from "@/lib/logger";
+import { getAttachment } from "@/lib/gmail-util";
+import { runUserEmailThreadsSummarization } from "@/job/emailThreadSummarization";
 
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     
+    const requestId = req.headers.get("x-request-id") || "";
+
+    // return await testGetAttachment();
     // return testSafeParse();
 
     // return getGenKitModels();
 
-    // return await testSummarizeAttachment();
+    // return await testSummarizeAttachment(requestId);
 
-    return await testHydrateEmailThread();
+    // return await testHydrateEmailThread(requestId);
+
+    return await testRunUserEmailThreadsSummarization(requestId);
 
     // const user = await getUser("ned.zhang@paracognition.ai");
     // // logger.info("**aaa-test** getUser: ", user);
@@ -29,7 +36,14 @@ export async function GET() {
     // return NextResponse.json(user);
 }
 
-async function testHydrateEmailThread() {
+async function testGetAttachment(requestId: string) {
+    const attachment = await getAttachment({ requestId }, "ned.zhang@paracognition.ai", 
+        "196f373962a23259", 
+        "ANGjdJ8-xiqcs8tmfFx1p1SNaS_dodp7ZppjTQjQEjhu5mHz14pSKmZMW3-uImfGekAXEBy3h42AoxS5SSf8D0qBKAZB8UYcI7K9vS6nazq-Yd4llKDVlfX45TvWrNRBl1MiEXUsGHtW4gROPJofmdoeCbCzpTozB_5WT_RhO7uMLS6LjdboKwFE53s-7PIziEeVAehRy4sqEiB32uJBqcvOHqh64wHurWlfFBsm71EwkofzNIfaayFzo3rVDp-srEmxrPQnlQieKXivkGhmXZQRTji8jx-rgQw2fG-uH1jzA7V9AniVAoQt8evQZi28Cv3LWrOJeHWjIgH_oJV94mBOXMpoGj-6PRHGqXqidfsEFTxFGmbo9883W5xekNp8n4owsJq9m_CM3XjEAO1R");
+    return NextResponse.json(attachment);
+}
+
+async function testHydrateEmailThread(requestId: string) {
 
     const outfilepath = path.join(process.cwd(), "email-store", "thread-196e98bc041bf1fc.json");
 
@@ -37,16 +51,16 @@ async function testHydrateEmailThread() {
 
     const gmailThread:GmailThread = JSON.parse(gthread);
 
-    const fullThread = await hydrateThread("ned.zhang@paracognition.ai", gmailThread);
+    const fullThread = await hydrateThread( { requestId }, "ned.zhang@paracognition.ai", gmailThread);
 
     return NextResponse.json(fullThread);
 }
 
-async function  testSummarizeAttachment() {
+async function  testSummarizeAttachment(requestId: string) {
 
     // gmailThread.messages[0].payload
 
-    const stdEmail = await parseGmailMessage("ned.zhang@paracognition.ai", gmailThread.messages[0], true);
+    const stdEmail = await parseGmailMessage({ requestId }, "ned.zhang@paracognition.ai", gmailThread.messages[0], true);
 
     // logger.info("**testSummarizeAttachment** stdEmail:", stdEmail);
 
@@ -66,7 +80,12 @@ function getGenKitModels() {
 
 }
 
-function testSafeParse() {
+async function testRunUserEmailThreadsSummarization(requestId: string) {
+    await runUserEmailThreadsSummarization({ requestId }, "ned.zhang@paracognition.ai");
+    return NextResponse.json({ message: "runUserEmailThreadsSummarization started" });
+}
+
+function testSafeParse(requestId: string) {
     const response = {
         "threads": [
             {
@@ -140,5 +159,10 @@ function testSafeParse() {
 
     const parseResult = GRestErrorSchema.safeParse(response);
 
-    logger.info("**testSafeParse** parseResult: ", parseResult);
+    logger.info(makeLogEntry( {
+        time: Date.now(),
+        module: "aaa-test",
+        function: "testSafeParse",
+        requestId,
+    }, { parseResult }, "**testSafeParse** safePrase returned result."));
 }

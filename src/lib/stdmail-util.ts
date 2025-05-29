@@ -1,8 +1,5 @@
 "use server";
 
-// Standard Email Utilities
-// The utility help to standardize email data for easier processing
-
 import {
     GmailMessage,
     GmailThread,
@@ -21,18 +18,22 @@ import { getAttachment } from "./gmail-util";
 import { summarizeAttachment } from "@/ai/flows/summarize-attachment";
 import { summarizeEmail } from "@/ai/flows/summarize-email";
 import { summarizeEmailThread } from "@/ai/flows/summarize-email-thread";
-
-import logger from "@/lib/logger";
-
+import { decodeBase64 } from "./string-util";
+import logger, { LogContext, makeLogEntry } from "@/lib/logger";
 
 /**
  * Recursively processes MIME parts to extract content and attachments
- * @param {string} userId - Authenticated user ID
- * @param {string} messageId - Gmail message ID
- * @param {PayloadPart} part - MIME part to process
- * @returns {Promise<Array<{ filename: string, mimetype: string, data: string, attachmentId: string }>>} Processed content array
+ * @param {LogContext} logContext - Logging context for request tracing
+ * @param {string} userId - Authenticated user identifier
+ * @param {string} messageId - Gmail message ID being processed
+ * @param {PayloadPart} part - MIME part to analyze
+ * @param {boolean} [downloadAttachment=false] - Whether to fetch attachment binaries
+ * @returns {Promise<Array<{filename: string, mimetype: string, data: string, attachmentId: string}>>}
+ *          Processed parts with metadata and content
+ * @throws {Error} If attachment download fails
  */
 async function collectPartsInAMessage(
+    logContext: LogContext,
     userId: string,
     messageId: string,
     part: PayloadPart,
@@ -47,32 +48,50 @@ async function collectPartsInAMessage(
         }
     >
 > {
-    // Handle nested multipart content
+    // Handle multipart containers (common in emails with attachments)
     if (part.mimeType.startsWith("multipart/")) {
         const subParts = await Promise.all(
             (part.parts || []).map((p) =>
-                collectPartsInAMessage(userId, messageId, p)
+                collectPartsInAMessage(
+                    logContext,
+                    userId,
+                    messageId,
+                    p,
+                    downloadAttachment,
+                )
             ),
         );
         return subParts.flat();
     }
 
-    // Initialize data with base content
     let data = part.body?.data || "";
 
-    // Handle file attachments
+    // Only download attachments when explicitly requested (performance optimization)
     if (downloadAttachment && part.filename && part.body?.attachmentId) {
         const attachment = await getAttachment(
+            logContext,
             userId,
             messageId,
             part.body.attachmentId,
         );
-
         if (attachment) {
             data = attachment.data;
-            logger.info(
-                `**collectPartsInAMessage** Downloaded attachment: ${part.filename}, Size: ${attachment.size} bytes`,
-            );
+            logger.info(makeLogEntry(
+                {
+                    ...logContext,
+                    time: Date.now(),
+                    module: "stdmail-util",
+                    function: "collectPartsInAMessage",
+                },
+                {
+                    userId,
+                    messageId,
+                    fileName: part.filename,
+                    attachmentId: part.body.attachmentId,
+                    size: attachment.size,
+                },
+                "Attachment downloaded successfully",
+            ));
         }
     }
 
@@ -84,39 +103,44 @@ async function collectPartsInAMessage(
     }];
 }
 
+/**
+ * Converts raw Gmail API response to standardized email format
+ * @param {LogContext} logContext - Logging context for request tracing
+ * @param {string} userId - Authenticated user identifier
+ * @param {GmailMessage} message - Raw Gmail message object
+ * @param {boolean} [downloadAttachments=false] - Whether to fetch attachment content
+ * @param {string} [dbThreadKey=""] - Database thread key for relationship mapping
+ * @returns {Promise<StandardEmail>} Normalized email object with structured data
+ * @throws {Error} If message parsing fails
+ */
 export async function parseGmailMessage(
+    logContext: LogContext,
     userId: string,
     message: GmailMessage,
     downloadAttachments: boolean = false,
     dbThreadKey: string = "",
 ): Promise<StandardEmail> {
-    const headerMap = message.payload?.headers.reduce(
-        (acc: Record<string, string>, header) => {
-            acc[header.name.toLowerCase()] = header.value;
-            return acc;
-        },
-        {},
-    );
+    // Normalize headers to lowercase for consistent access
+    const headerMap = message.payload?.headers.reduce((acc, header) => {
+        acc[header.name.toLowerCase()] = header.value;
+        return acc;
+    }, {} as Record<string, string>);
 
     const stdEmail: StandardEmail = {
-        // dbThreadKey: dbThreadKey,
         messageId: message.id,
         from: headerMap?.from || "",
         to: headerMap?.to || "",
         subject: headerMap?.subject,
         receivedAt: headerMap?.date,
         snippet: message.snippet,
-        // attachments: [],
-        // summary: '',
+        ...(dbThreadKey && { dbThreadKey }),
     };
 
-    if (dbThreadKey) stdEmail.dbThreadKey = dbThreadKey;
-
-    // flatten the parts of the message. Email usually have multipart part which has parts in them (like text/plain and text/html parts)
-
+    // Process all MIME parts recursively
     const parts = (await Promise.all(
         (message.payload?.parts || []).map((part) =>
             collectPartsInAMessage(
+                logContext,
                 userId,
                 message.id,
                 part,
@@ -125,81 +149,120 @@ export async function parseGmailMessage(
         ),
     )).flat();
 
-    // now we check the parts to get body of the email (text/plain or text/html). We also get the attachments.
-
     for (const part of parts || []) {
         if (part.filename && part.attachmentId) {
-            // we have an attachment
             stdEmail.attachments = stdEmail.attachments || [];
-            stdEmail.attachments?.push(part);
+            stdEmail.attachments.push(part);
         } else if (
             part.mimetype === "text/plain" && part.data && !stdEmail.body
         ) {
-            // only take from text/plain if we don't have text/html
-            // Need to decode the base64 encoded body
+            // Prefer plain text for AI processing
             stdEmail.body = decodeBase64(part.data);
         } else if (part.mimetype === "text/html" && part.data) {
-            // Need to decode the base64 encoded body
+            // HTML fallback preserves formatting
             stdEmail.body = decodeBase64(part.data);
         } else {
-            logger.warn(`**parseGmailMessage** unknown part is ignored: ${part}`);
+            logger.warn(makeLogEntry(
+                {
+                    ...logContext,
+                    time: Date.now(),
+                    module: "stdmail-util",
+                    function: "parseGmailMessage",
+                },
+                { unknownPart: part },
+                "Unrecognized MIME part ignored",
+            ));
         }
     }
 
-    logger.debug(`**parseGmailMessage** stdEmail: ${stdEmail}`);
+    logger.debug(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "stdmail-util",
+            function: "parseGmailMessage",
+        },
+        { standardizedEmail: stdEmail },
+        "Message parsing completed",
+    ));
 
     return stdEmail;
 }
 
-function decodeBase64(base64Encoded: string): string {
-    return Buffer.from(base64Encoded, "base64").toString("utf-8");
-}
-
 /**
- * Enrich a gmail message with summarization
- *   - from DB if already summarized before
- *   - from AI if it hasn't bee summarized
+ * Enriches email data with cached or generated summaries
+ * @param {LogContext} logContext - Logging context for request tracing
+ * @param {string} userId - Authenticated user identifier
+ * @param {GmailMessage} message - Raw Gmail message to enhance
+ * @returns {Promise<StandardEmail>} Enhanced email with AI summaries
+ * @throws {Error} If summarization fails
  */
 async function hydrateEmail(
+    logContext: LogContext,
     userId: string,
     message: GmailMessage,
 ): Promise<StandardEmail> {
-    // check if we have a summary in the DB
-    const emailAbs = await getEmailAbstract(userId, message.id);
-
-    // if we have a summary, return it right away
-    if (emailAbs && emailAbs.summary) {
-        logger.info(
-            `**hydrateEmail** loaded from db for email id: ${emailAbs.messageId} dbThreadKey: ${emailAbs.dbThreadKey}`,
-        );
+    // Check cache first to avoid redundant processing
+    const emailAbs = await getEmailAbstract(logContext, userId, message.id);
+    if (emailAbs?.summary) {
+        logger.debug(makeLogEntry(
+            {
+                ...logContext,
+                time: Date.now(),
+                module: "stdmail-util",
+                function: "hydrateEmail",
+            },
+            { emailAbsFromDb: emailAbs },
+            "**hydrateEmail** email summary found in db. use it.",
+        ));
         return emailAbs;
     }
 
-    logger.info(
-        `**hydrateEmail** invoke AI to summarize message id: ${message.id}`,
-    );
+    // Full processing path when no cache exists
+    const stdEmail = await parseGmailMessage(logContext, userId, message, true);
+    logger.info(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "stdmail-util",
+            function: "hydrateEmail",
+        },
+        { gmailMessage: message },
+        "Initiating AI summarization",
+    ));
 
-    const stdEmail = await parseGmailMessage(userId, message, true);
+    const neoEmailAbs = await generateEmailSummary(logContext, stdEmail);
+    await setEmailAbstract(logContext, userId, message.id, neoEmailAbs);
 
-    const neoEmailAbs = await generateEmailSummary(stdEmail);
-
-    logger.info(
-        `**hydrateEmail** AI summarized ${message.id} to ${neoEmailAbs.summary}`,
-    );
-
-    await setEmailAbstract(userId, message.id, neoEmailAbs);
-
-    logger.info(
-        `**hydrateEmail** saved to db for email id: ${neoEmailAbs.messageId} dbThreadKey: ${neoEmailAbs.dbThreadKey}`,
-    );
+    logger.info(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "stdmail-util",
+            function: "hydrateEmail",
+        },
+        {
+            messageId: neoEmailAbs.messageId,
+            dbThreadKey: neoEmailAbs.dbThreadKey,
+        },
+        "Persisted new email summary",
+    ));
 
     return neoEmailAbs;
 }
 
+/**
+ * Generates AI-powered summaries for email content and attachments
+ * @param {LogContext} logContext - Logging context for request tracing
+ * @param {StandardEmail} email - Structured email data to analyze
+ * @returns {Promise<StandardEmail>} Enhanced email with generated summaries
+ * @throws {Error} If AI processing fails
+ */
 async function generateEmailSummary(
+    logContext: LogContext,
     email: StandardEmail,
 ): Promise<StandardEmail> {
-    // check if all attachments have summary
+    // Process attachments first for comprehensive context
     for (const attachment of email.attachments || []) {
         if (!attachment.summary) {
             const attachmentSummary = await summarizeAttachment(attachment);
@@ -207,111 +270,161 @@ async function generateEmailSummary(
         }
     }
 
-    // Now attachments are all summarized, we can summarize the email
+    // Generate main email summary with full context
     const emailSummary = await summarizeEmail(email);
-
-    logger.info("**generateEmailSummary** emailSummary: ", emailSummary);
-
     email.summary = emailSummary.summary;
+
+    logger.trace(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "stdmail-util",
+            function: "generateEmailSummary",
+        },
+        { emailSummary },
+        "AI summarization completed",
+    ));
 
     return email;
 }
 
+/**
+ * Processes complete email thread into standardized format with summaries
+ * @param {LogContext} logContext - Logging context for request tracing
+ * @param {string} userId - Authenticated user identifier
+ * @param {GmailThread} thread - Raw Gmail thread to process
+ * @returns {Promise<StandardEmailThread>} Normalized thread with AI insights
+ * @throws {Error} If thread processing fails
+ */
 export async function hydrateThread(
+    logContext: LogContext,
     userId: string,
     thread: GmailThread,
 ): Promise<StandardEmailThread> {
-    var threadKey: string | undefined = undefined;
+    logger.info(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "stdmail-util",
+            function: "hydrateThread",
+        },
+        { userId, threadId: thread.id, snippet: thread.snippet },
+        `**ThreadsSummarization** Started hydrating thread ${thread.id} for user ${userId}`,
+    ));
 
-    // Get all ids of the messages in the thread. We need the ordering in thread.
     const messageIds = thread.messages.map((message) => message.id);
-
-    // Go through all messages in the thread and get abstracts either from the database or from the AI.
     const messageAbsMap: Record<string, StandardEmail> = {};
+    let threadKey: string | undefined;
 
+
+    // Process messages in sequence to maintain order
     for (const message of thread.messages) {
-    
-        const messageAbs = await hydrateEmail(userId, message);
+        const messageAbs = await hydrateEmail(logContext, userId, message);
+
+
         messageAbsMap[messageAbs.messageId!] = messageAbs;
-        // get the thread key from the message abstract if it is there
+
+
+        // Resolve thread key from existing messages
         if (messageAbs.dbThreadKey) {
             if (threadKey && threadKey !== messageAbs.dbThreadKey) {
-                logger.warn(
-                    `**hydrateThread** threadKey mismatch. some emails has ${threadKey} and we have ${messageAbs.dbThreadKey} now. Will use  ${messageAbs.dbThreadKey} becuase it should be from an older email`,
-                );
+                logger.warn(makeLogEntry(
+                    {
+                        ...logContext,
+                        time: Date.now(),
+                        module: "stdmail-util",
+                        function: "hydrateThread",
+                    },
+                    { key1: threadKey, key2: messageAbs.dbThreadKey },
+                    "Thread key mismatch detected",
+                ));
             }
             threadKey = messageAbs.dbThreadKey;
         }
     }
 
-    var threadAbs: StandardEmailThread | undefined = undefined;
+    // Attempt to load existing thread summary
+    let threadAbs = threadKey
+        ? await getThreadAbstract(logContext, userId, threadKey)
+        : undefined;
 
-    if (threadKey) {
-        // We have a thread key, so we can try to get the thread summary from the database.
-        threadAbs = await getThreadAbstract(userId, threadKey);
-    }
-
-    // If threadAbs is undefined or threadAbs.summary is undefined, or threadAbs.messageIds is not the same as messageIds, we need to get a new summary from the AI.
+    // Regenerate summary if missing or message list changed
     if (
-        !threadAbs || !threadAbs.summary ||
+        !threadAbs?.summary ||
         !areStringListsEqual(threadAbs.messageIds, messageIds)
     ) {
         if (messageIds.length === 1) {
-            // if there is only one message, we can use the message summary as the thread summary.
             threadKey = messageIds[0];
-
             threadAbs = {
-                dbThreadKey: messageIds[0],
-                summary: messageAbsMap[messageIds[0]].summary,
+                dbThreadKey: threadKey,
+                summary: messageAbsMap[messageIds[0]].summary!,
                 messageIds: [messageIds[0]],
                 snippet: thread.snippet,
                 messages: [messageAbsMap[messageIds[0]]],
             };
-            // // update the messageAbsMap to have the correct dbThreadKey.
-            // messageAbsMap[messageIds[0]].dbThreadKey = messageIds[0]
         } else {
-            // We need to get a new summary from the AI.
+            threadKey = createThreadKey(messageIds);
             threadAbs = {
-                dbThreadKey: messageIds[messageIds.length - 1], // use the earliest message id as the thread key.
+                dbThreadKey: threadKey,
                 messageIds: messageIds,
                 snippet: thread.snippet,
                 messages: messageIds.map((id) => messageAbsMap[id]),
             };
 
+            logger.info(makeLogEntry(
+                {
+                    ...logContext,
+                    time: Date.now(),
+                    module: "stdmail-util",
+                    function: "hydrateThread",
+                },
+                {},
+                `**hydrateThread** Call AI to summarize thread ${threadKey} with ${messageIds.length} messages`,
+            ));
             const summary = await summarizeEmailThread(threadAbs);
             threadAbs.summary = summary.summary;
-
-            // save the new thread summary to the database.
-            await setThreadAbstract(userId, threadAbs.dbThreadKey!, threadAbs);
         }
+
+        await setThreadAbstract(logContext, userId, threadKey, threadAbs);
     }
 
-    // go through the messages to see if any of them have updated threadKey that needs to be save to db
+    // attach the EmailAbstracts to the threadAbs
+    threadAbs.messages = messageIds.map((id) => messageAbsMap[id]);
+
+    // Ensure message-thread relationship consistency by setting all the messages 
+    // that Gmail thinks are in this thread to have the same threadKey in our db.
     await Promise.all(messageIds.map(async (id) => {
         const mabs = messageAbsMap[id];
         if (mabs.dbThreadKey !== threadKey) {
-            mabs.dbThreadKey = threadKey;
-            await setEmailAbstract(userId, id, mabs);
+            mabs.dbThreadKey = threadKey!;
+            await setEmailAbstract(logContext, userId, id, mabs);
         }
     }));
 
-    if (threadAbs && threadAbs.summary) {
-        threadAbs.messages = messageIds.map((id) => messageAbsMap[id]);
-
-        return threadAbs;
-    } else {
-        throw new Error(
-            "**hybridThreadSummary** Failed to get or generate thread summary",
-        );
+    if (!threadAbs.summary) {
+        throw new Error("Thread summary generation failed");
     }
+
+    logger.info(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "stdmail-util",
+            function: "hydrateThread",
+        },
+        { threadAbs },
+        `**hydrateThread** Thread ${threadKey} hydrated with ${messageIds.length} messages`,
+    ));
+
+    return threadAbs;
 }
 
 /**
- * Create a thread key by using the message id from the last message in the list.
- * @param messageIds list of message ids in the thread
- * @returns
+ * Generates thread identifier from message chronology
+ * @param {string[]} messageIds - Array of message IDs in reverse chronological order
+ * @returns {string} Thread key using earliest message ID
+ * @description Gmail returns messages newest-first, so last array element is oldest
  */
-function createThreadKey(messageIds: string[]) {
-    // return the last messageId from the list as the thread id
+function createThreadKey(messageIds: string[]): string {
     return messageIds[messageIds.length - 1];
 }

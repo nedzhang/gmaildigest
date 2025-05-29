@@ -5,7 +5,7 @@ import { OAuthToken, OAuthTokenSchema } from "@/types/firebase";
 import { getUser, updateToken } from "./gduser-util";
 import { refreshToken } from "firebase-admin/app";
 import { shallowCopyObjProperties } from "./object-util";
-import logger from "./logger";
+import logger, { LogContext, makeLogEntry } from "./logger";
 
 class UserAuthError extends Error {
     type: UserAuthError.ErrorType;
@@ -257,14 +257,14 @@ export async function createOAuthUrl(
  * @returns Renewed access token
  * @throws Error if any required token or configuration is missing
  */
-export async function getAccessToken(userId: string) {
+export async function getAccessToken(logContext: LogContext, userId: string) {
     const BUFFER_SECONDS = 10; // 10 seconds buffer for tocken expiration. (renew at expire_at - 10 seconds)
 
     if (!process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_ID) {
         throw new Error("Missing Google Client ID configuration");
     }
 
-    const user = await getUser(userId);
+    const user = await getUser(logContext, userId);
 
     if (!user) {
         throw new UserAuthError(
@@ -287,19 +287,44 @@ export async function getAccessToken(userId: string) {
         user.latest_token.expires_at > nowInSeconds
     ) {
         // the access token is still active
-        logger.info(
+        logger.debug(makeLogEntry(
+            {
+                ...logContext,
+                time: Date.now(),
+                module: "oauth2-util",
+                function: "getAccessToken",
+            },
+            {
+                nowInSeconds,
+                expires_at: user.latest_token.expires_at,
+                refresh_token_expires_at:
+                    user.latest_token.refresh_token_expires_at,
+            },
             `**getAccessToken** access token is still active for "${userId}". Expires at ${
                 new Date(user.latest_token.expires_at * 1000).toLocaleString()
             } `,
-        );
+        ));
+
         return user.latest_token.access_token;
     } else { // the access token is not active
-        logger.info(
+        logger.debug(makeLogEntry(
+            {
+                ...logContext,
+                time: Date.now(),
+                module: "oauth2-util",
+                function: "getAccessToken",
+            },
+            {
+                nowInSeconds,
+                expires_at: user.latest_token.expires_at,
+                refresh_token_expires_at:
+                    user.latest_token.refresh_token_expires_at,
+            },
             `**getAccessToken** access token expired for "${userId}". Expired at ${
                 new Date((user.latest_token.expires_at || 0) * 1000)
                     .toLocaleString()
             }`,
-        );
+        ));
 
         if (
             !user.latest_token.refresh_token ||
@@ -325,14 +350,31 @@ export async function getAccessToken(userId: string) {
                 "refresh_token",
                 "refresh_token_expires_in",
             ]);
-            const tokensUpdated = await updateToken(userId, user.latest_token_id, tokensForUpdate);
+            const tokensUpdated = await updateToken(
+                logContext,
+                userId,
+                user.latest_token_id,
+                tokensForUpdate,
+            );
 
-            logger.info(
+            logger.debug(makeLogEntry(
+                {
+                    ...logContext,
+                    time: Date.now(),
+                    module: "oauth2-util",
+                    function: "getAccessToken",
+                },
+                {
+                    nowInSeconds,
+                    expires_at: tokensUpdated.expires_at,
+                    refresh_token_expires_at:
+                        tokensUpdated.refresh_token_expires_at,
+                },
                 `**getAccessToken** renewed token for "${userId}". New access token expires at ${
                     new Date((tokensUpdated.expires_at || 0) * 1000)
                         .toLocaleString()
                 }`,
-            );
+            ));
 
             return newTokens.access_token;
         } else {

@@ -185,6 +185,7 @@ export async function processGoogleOAuth2Callback(
  * @throws Error if parameters are missing or request fails
  */
 async function renewToken(
+    logContext: LogContext,
     googleClientId: string,
     refreshToken: string,
 ): Promise<OAuthToken> {
@@ -212,12 +213,15 @@ async function renewToken(
 
     const newToken = OAuthTokenSchema.parse(await res.json());
 
-    logger.info(
-        "**renewToken** token renewed with access_token:\n",
-        newToken.access_token,
-        "\nid_token:\n",
-        newToken.id_token,
-    );
+    logger.info(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "oauth2-util",
+            function: "renewToken",
+        },
+        { googleClientId, "expires_in": newToken.expires_in },
+        "**renewToken** token renewed with refreshToken"));
     return newToken;
 }
 
@@ -300,8 +304,7 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
                 refresh_token_expires_at:
                     user.latest_token.refresh_token_expires_at,
             },
-            `**getAccessToken** access token is still active for "${userId}". Expires at ${
-                new Date(user.latest_token.expires_at * 1000).toLocaleString()
+            `**getAccessToken** access token is still active for "${userId}". Expires at ${new Date(user.latest_token.expires_at * 1000).toLocaleString()
             } `,
         ));
 
@@ -320,9 +323,8 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
                 refresh_token_expires_at:
                     user.latest_token.refresh_token_expires_at,
             },
-            `**getAccessToken** access token expired for "${userId}". Expired at ${
-                new Date((user.latest_token.expires_at || 0) * 1000)
-                    .toLocaleString()
+            `**getAccessToken** access token expired for "${userId}". Expired at ${new Date((user.latest_token.expires_at || 0) * 1000)
+                .toLocaleString()
             }`,
         ));
 
@@ -340,6 +342,7 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
             // we can refresh
 
             const newTokens = await renewToken(
+                logContext,
                 process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_ID,
                 user.latest_token.refresh_token,
             );
@@ -370,9 +373,8 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
                     refresh_token_expires_at:
                         tokensUpdated.refresh_token_expires_at,
                 },
-                `**getAccessToken** renewed token for "${userId}". New access token expires at ${
-                    new Date((tokensUpdated.expires_at || 0) * 1000)
-                        .toLocaleString()
+                `**getAccessToken** renewed token for "${userId}". New access token expires at ${new Date((tokensUpdated.expires_at || 0) * 1000)
+                    .toLocaleString()
                 }`,
             ));
 

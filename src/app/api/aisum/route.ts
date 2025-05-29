@@ -5,12 +5,12 @@ import { StandardEmail, GmailMessage, GmailThread, PayloadPart } from '@/types/g
 import { getAttachment } from '@/lib/gmail-util';
 import { getSession } from '@/lib/session';
 import { NextDataPathnameNormalizer } from 'next/dist/server/normalizers/request/next-data';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { decodeUnicodeEscapes } from '@/lib/string-util';
 import { getEmailAbstract } from '@/lib/gduser-util';
 import { summarizeEmail } from '@/ai/flows/summarize-email'
 import path from 'path';
-import logger from '@/lib/logger';
+import logger, { LogContext } from '@/lib/logger';
 
 
 const testThread: GmailThread = {
@@ -255,6 +255,7 @@ const testThread: GmailThread = {
  * @returns {Promise<Array<{ mimetype: string, data: string }>>} Processed content array
  */
 async function collectPartsInAMessage(
+    logContext: LogContext,
     userId: string,
     messageId: string,
     part: PayloadPart
@@ -262,7 +263,7 @@ async function collectPartsInAMessage(
     // Handle nested multipart content
     if (part.mimeType.startsWith('multipart/')) {
         const subParts = await Promise.all(
-            (part.parts || []).map(p => collectPartsInAMessage(userId, messageId, p))
+            (part.parts || []).map(p => collectPartsInAMessage(logContext, userId, messageId, p))
         );
         return subParts.flat();
     }
@@ -273,6 +274,7 @@ async function collectPartsInAMessage(
     // Handle file attachments
     if (part.filename && part.body?.attachmentId) {
         const attachment = await getAttachment(
+            logContext,
             userId,
             messageId,
             part.body.attachmentId
@@ -293,12 +295,13 @@ async function collectPartsInAMessage(
 }
 
 async function selectEmailParts(
+    logContext: LogContext,
     userId: string,
     messageId: string,
     part: PayloadPart
   ): Promise<Array<{ mimetype: string; data: string }>> {
   
-    const parts = await collectPartsInAMessage(userId, messageId, part);
+    const parts = await collectPartsInAMessage(logContext, userId, messageId, part);
   
     // Find indices of text/plain and text/html
     const textPlainIndex = parts.findIndex(p => p.mimetype === 'text/plain');
@@ -313,9 +316,9 @@ async function selectEmailParts(
     });
   }
 
-async function summarizeMessage(userId: string, messageAbstract: StandardEmail): Promise<StandardEmail> {
+async function summarizeMessage(logContext: LogContext, userId: string, messageAbstract: StandardEmail): Promise<StandardEmail> {
     
-    const emailAbs = await getEmailAbstract(userId, messageAbstract.messageId!);
+    const emailAbs = await getEmailAbstract(logContext, userId, messageAbstract.messageId!);
     
     logger.debug("**summarizeMessage** emailAbs:", emailAbs);
 
@@ -333,7 +336,7 @@ async function summarizeMessage(userId: string, messageAbstract: StandardEmail):
 
 }
 
-async function processMessage(userId: string, message: GmailMessage): Promise<StandardEmail>{
+async function processMessage(logContext: LogContext, userId: string, message: GmailMessage): Promise<StandardEmail>{
 
     //convert header from an array to a dict
     const headerDictionary = message.payload?.headers?.reduce<Record<string, string>>(
@@ -355,26 +358,26 @@ async function processMessage(userId: string, message: GmailMessage): Promise<St
         subject: headerDictionary['subject'] || '',
         receivedAt: headerDictionary['date'] || '',
         parts: (await Promise.all(
-            (message.payload?.parts || []).map(part => selectEmailParts(userId, message.id, part)
+            (message.payload?.parts || []).map(part => selectEmailParts(logContext, userId, message.id, part)
             )
         )).flat(),
     };
 
     // get summaries from DB or create them with AI and save to DB
 
-    const messageWithSummary = summarizeMessage(userId, messageData)
+    const messageWithSummary = summarizeMessage(logContext, userId, messageData)
 
     return messageWithSummary;
 }
 
 
-async function processEmailThread(userId:string, thread: GmailThread) {
+async function processEmailThread(logContext: LogContext, userId:string, thread: GmailThread) {
     
     // @refresh reset
 
     return await Promise.all(
         thread.messages.map(async (message) => {
-            await processMessage(userId, message)
+            await processMessage(logContext, userId, message)
         }));
 }
 
@@ -390,9 +393,13 @@ async function processEmailThread(userId:string, thread: GmailThread) {
  * @param {Request} request - Next.js request object
  * @returns {NextResponse} JSON response containing processed messages with decoded content
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
+        const requestId = request.headers.get('x-request-id');
 
+        if (!requestId) {
+            throw new Error('**aisum** Request ID not found in headers');
+        }
 
         const session = await getSession();
 
@@ -401,8 +408,16 @@ export async function GET(request: Request) {
             throw new Error('User email not found in session');
         }
 
+        
+        const logContext: LogContext = {
+            requestId,
+            additional: {
+                userId: session.userEmail
+            }
+        }
+
         // Process all messages in parallel
-        const neoMessages = await processEmailThread(session.userEmail, testThread);
+        const neoMessages = await processEmailThread(logContext, session.userEmail, testThread);
 
         return NextResponse.json(neoMessages);
 

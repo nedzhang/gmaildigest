@@ -89,7 +89,16 @@ export async function updateToken(
     );
     const updatedTokens = addExpirationTimestamps(tokenSet);
 
-    logger.info(`Updating token for user ${userId}, token ${tokenId}`);
+    logger.info(makeLogEntry(
+        {
+            ...logContext,
+            time: Date.now(),
+            module: "gduser-util",
+            function: "updateToken",
+        },  
+        { userId, tokenId },
+        `**updateToken** Updating token for user ${userId}, token ${tokenId}`));
+
     await updateDoc(tokenDoc, updatedTokens);
 
     return updatedTokens;

@@ -19,6 +19,8 @@ import { hasProperty } from "./object-util";
 
 // Constants for environment detection
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const IS_TEST = process.env.NODE_ENV === "test";
+
 const LOGTAIL_CONFIGURED =
   !!(process.env.LOGTAIL_TOKEN && process.env.LOGTAIL_ENDPOINT);
 
@@ -141,7 +143,21 @@ function getRequestPath(req: NextRequest | Record<string, any>): string {
 function configureTransports(): pino.TransportTargetOptions[] {
   const transports: pino.TransportTargetOptions[] = [];
 
-  if (!IS_PRODUCTION) {
+  if (IS_PRODUCTION) {
+    // Production default: JSON-formatted console logs
+    transports.push({
+      target: "pino/file",
+      level: "info",
+      options: { destination: 1 }, // stdout
+    });
+  }else if (IS_TEST) {
+    // We don't want too large log message to contaiminate the test output.
+    transports.push({
+      target: "pino/file",
+      level: "error",
+      options: { destination: 1 }, // stdout
+    });
+  } else {
     transports.push({
       target: "pino-pretty",
       level: "debug",
@@ -150,13 +166,6 @@ function configureTransports(): pino.TransportTargetOptions[] {
         translateTime: "SYS:yyyy-mm-dd HH:MM:ss.l",
         ignore: "pid,hostname",
       },
-    });
-  } else {
-    // Production default: JSON-formatted console logs
-    transports.push({
-      target: "pino/file",
-      level: "info",
-      options: { destination: 1 }, // stdout
     });
   }
 
@@ -195,7 +204,7 @@ if (IS_PRODUCTION && !LOGTAIL_CONFIGURED) {
   logger.warn("Production logging operating in fallback mode (stdout only)");
 }
 
-export function makeLogContext(  context: {req?: NextRequest, requestId?: string, additional?: Record<string, unknown> }) {
+export function makeLogContext(context: { req?: NextRequest, requestId?: string, additional?: Record<string, unknown> }) {
 
   const id = context.requestId || context.req?.headers.get("x-request-id") || "";
 
@@ -208,7 +217,7 @@ export function makeLogContext(  context: {req?: NextRequest, requestId?: string
   };
 
   if (context.additional && hasProperty(context.additional as object)) {
-    ctx.additional =  context.additional;
+    ctx.additional = context.additional;
   }
 
   return ctx

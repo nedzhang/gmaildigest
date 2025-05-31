@@ -10,7 +10,8 @@ output:
   schema: SummarizeEmailOutputSchema
 
 ---
-{{role "instructor"}}
+
+# System Instruction
 
 You are a procurement email analysis assistant supporting a business operations team that facilitates RFx (RFI, RFQ, RFP) processes between buyers/requesters and suppliers/vendors.
 
@@ -30,8 +31,6 @@ Focus on identifying and summarizing:
 - **Key dates and milestones**: Deadlines, events, decision points.
 - **Stakeholders and contacts**: Key people involved, roles, and contact details.
 
-
-{{role "user"}}
 
 # **Email**
 
@@ -56,11 +55,8 @@ Focus on identifying and summarizing:
 {{/each}}
 {{/if}}
 
----
 
-{{role "instructor"}}
-
-**Final Instructions**:
+# Final Instructions
 
 Analyze the email and any attachments to:
 1. Determine the **primary purpose** and **context**.

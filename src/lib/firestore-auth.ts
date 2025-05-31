@@ -32,7 +32,7 @@ const firebaseConfig = {
 let authInstance: Auth;
 let userCredential: UserCredential;
 
-
+let firestoreDb: Firestore | undefined;
 
 /**
  * Initializes and returns the Firebase Admin app instance
@@ -60,6 +60,7 @@ function initializeAdminApp(): App {
  * @throws {Error} If client app initialization fails
  */
 function initializeFirebaseApp(): FirebaseApp {
+    
     if (!getFirebaseApps().length) {
         initializeApp(firebaseConfig);
     }
@@ -121,9 +122,9 @@ async function performSignIn(logContext: LogContext): Promise<{ auth: Auth; user
  * @returns {Promise<Firestore>} Initialized Firestore instance
  * @throws {Error} If authentication fails or ID token is unavailable
  */
-export async function getDb(logContext: LogContext): Promise<Firestore> {
+export async function getDb(logContext: LogContext, forceNew: boolean = false, reAuth: boolean = false): Promise<Firestore> {
     // Reuse existing auth if available
-    if (!authInstance || !userCredential) {
+    if (reAuth || !authInstance || !userCredential) {
         const { auth: newAuth, userCred: newUserCred } = await performSignIn(logContext);
         authInstance = newAuth;
         userCredential = newUserCred;
@@ -161,6 +162,10 @@ export async function getDb(logContext: LogContext): Promise<Firestore> {
         throw new Error("**getDb** Failed to obtain valid authentication token");
     }
 
-    // Initialize and return Firestore instance
-    return getFirestore(initializeFirebaseApp());
+    // check if we need to initialize the firestore
+    if (!firestoreDb || forceNew) {
+        firestoreDb = getFirestore(initializeFirebaseApp());
+    }
+
+    return firestoreDb;
 }

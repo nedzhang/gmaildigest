@@ -3,16 +3,14 @@
  * https://jestjs.io/docs/configuration
  */
 
-const nextJest = require('next/jest')
- 
-/** @type {import('jest').Config} */
-const createJestConfig = nextJest({
-  // Provide the path to your Next.js app to load next.config.js and .env files in your test environment
-  dir: './',
-})
+import type { Config } from "jest";
 
-/** @type {import('jest').Config} */
-const config = {
+
+import nextJest from 'next/jest.js'
+ 
+ 
+
+const config: Config = {
   // All imported modules in your tests should be mocked automatically
   // automock: false,
 
@@ -20,7 +18,7 @@ const config = {
   // bail: 0,
 
   // The directory where Jest should store its cached dependency information
-  // cacheDirectory: "/tmp/jest_rs",
+  // cacheDirectory: "C:\\Users\\ned_z\\AppData\\Local\\Temp\\jest",
 
   // Automatically clear mock calls, instances, contexts and results before every test
   // clearMocks: false,
@@ -36,8 +34,11 @@ const config = {
 
   // An array of regexp pattern strings used to skip coverage collection
   // coveragePathIgnorePatterns: [
-  //   "/node_modules/"
+  //   "\\\\node_modules\\\\"
   // ],
+  coveragePathIgnorePatterns: [
+    "/node_modules\/(?!\@genkit-ai)(.*)"
+  ],
 
   // Indicates which provider should be used to instrument code for coverage
   coverageProvider: "v8",
@@ -98,12 +99,14 @@ const config = {
   //   "node"
   // ],
 
-  // A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
-  // moduleNameMapper: {},
-  moduleNameMapper: {
-    '^@/components/(.*)$': '<rootDir>/components/$1',
-  },
-
+  // // A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
+  // // moduleNameMapper: {},
+  // moduleNameMapper: {
+  //   "^@/components/(.*)$": "<rootDir>/components/$1",
+  //   "^@/ai/(.*)$": "<rootDir>/ai/$1",
+  //   "^@/types/(.*)$": "<rootDir>/types/$1",
+  //   "^@/lib/(.*)$": "<rootDir>/lib/$1",
+  // },
 
   // An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
   // modulePathIgnorePatterns: [],
@@ -116,7 +119,6 @@ const config = {
 
   // A preset that is used as a base for Jest's configuration
   // preset: undefined,
-  preset: 'ts-jest',
 
   // Run tests from one or more projects
   // projects: undefined,
@@ -136,9 +138,9 @@ const config = {
   // Automatically restore mock state and implementation before every test
   // restoreMocks: false,
 
-  // The root directory that Jest should scan for tests and modules within
-  // rootDir: undefined,
-  rootDir: 'src',
+  // // The root directory that Jest should scan for tests and modules within
+  // // rootDir: undefined,
+  // rootDir: "src",
 
   // A list of paths to directories that Jest should use to search for files in
   // roots: [
@@ -162,7 +164,7 @@ const config = {
 
   // The test environment that will be used for testing
   // testEnvironment: "jest-environment-node",
-  testEnvironment: 'jsdom',
+  testEnvironment: "jsdom",
 
   // Options that will be passed to the testEnvironment
   // testEnvironmentOptions: {},
@@ -178,7 +180,7 @@ const config = {
 
   // An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
   // testPathIgnorePatterns: [
-  //   "/node_modules/"
+  //   "\\\\node_modules\\\\"
   // ],
 
   // The regexp pattern or array of patterns that Jest uses to detect test files
@@ -190,18 +192,18 @@ const config = {
   // This option allows use of a custom test runner
   // testRunner: "jest-circus/runner",
 
+
   // A map from regular expressions to paths to transformers
   // transform: undefined,
   transform: {
-    '^.+\\.(ts|tsx)?$': 'ts-jest',
-    '^.+\\.(js|jsx)$': 'babel-jest',
+    "^.+\\.(ts|tsx)?$": "ts-jest",
+    "^.+\\.(js|jsx)$": "babel-jest",
   },
-
 
   // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
   // transformIgnorePatterns: [
-  //   "/node_modules/",
-  //   "\\.pnp\\.[^\\/]+$"
+  //   "\\\\node_modules\\\\",
+  //   "\\.pnp\\.[^\\\\]+$"
   // ],
 
   // An array of regexp pattern strings that are matched against all modules before the module loader will automatically return a mock for them
@@ -217,4 +219,9 @@ const config = {
   // watchman: true,
 };
 
-module.exports = createJestConfig(config);
+const createJestConfig = nextJest({
+  // Provide the path to your Next.js app to load next.config.js and .env files in your test environment
+  dir: './',
+})
+
+export default createJestConfig(config);

@@ -19,10 +19,10 @@ class UserAuthError extends Error {
 
 namespace UserAuthError {
     export enum ErrorType {
-        UNKNOWN,
-        NO_RECORD,
-        EXPIRED,
-        REJECTED,
+        UNKNOWN = "UNKNOWN",
+        NO_RECORD = "NO_RECORD",
+        EXPIRED = "EXPIRED",
+        REJECTED = "REJECTED",
     }
 }
 

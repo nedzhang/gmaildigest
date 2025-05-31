@@ -16,8 +16,8 @@ import {
 import { areStringListsEqual } from "./object-util";
 import { getAttachment } from "./gmail-util";
 import { summarizeAttachment } from "@/ai/flows/summarize-attachment";
-import { summarizeEmail } from "@/ai/flows/summarize-email";
-import { summarizeEmailThread } from "@/ai/flows/summarize-email-thread";
+import { summarizeEmailFlow } from "@/ai/flows/summarize-message";
+import { summarizeEmailThread } from "@/ai/flows/summarize-thread";
 import { decodeBase64 } from "./string-util";
 import logger, { LogContext, makeLogEntry } from "@/lib/logger";
 
@@ -271,7 +271,7 @@ async function generateEmailSummary(
     }
 
     // Generate main email summary with full context
-    const emailSummary = await summarizeEmail(email);
+    const emailSummary = await summarizeEmailFlow(email);
     email.summary = emailSummary.summary;
 
     logger.trace(makeLogEntry(

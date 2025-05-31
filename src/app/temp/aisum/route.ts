@@ -8,7 +8,7 @@ import { NextDataPathnameNormalizer } from 'next/dist/server/normalizers/request
 import { NextRequest, NextResponse } from 'next/server';
 import { decodeUnicodeEscapes } from '@/lib/string-util';
 import { getEmailAbstract } from '@/lib/gduser-util';
-import { summarizeEmail } from '@/ai/flows/summarize-email'
+import { summarizeEmailFlow } from '@/ai/flows/summarize-message'
 import path from 'path';
 import logger, { LogContext } from '@/lib/logger';
 
@@ -328,7 +328,7 @@ async function summarizeMessage(logContext: LogContext, userId: string, messageA
         // messageAbstract.parts?.splice(0,2);
         logger.debug('messageAbstract is now: ', messageAbstract);
         logger.debug("**summarizeMessage** Start summariziation");
-        const result = await summarizeEmail(messageAbstract);
+        const result = await summarizeEmailFlow(messageAbstract);
         logger.debug("**summarizeMessage** End summariziation");
         logger.debug("**summarizeMessage** result: ", result);
         return result;

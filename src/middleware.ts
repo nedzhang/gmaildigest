@@ -110,7 +110,7 @@ export function middleware(
       'middleware',
       "debug", 
       { req: reqSerializer(req) },
-      "**middleware** Incoming request Received."  // Original message restored
+      `**middleware** Incoming request Received @ ${req.nextUrl.pathname}`
     )
   );
 

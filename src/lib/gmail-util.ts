@@ -111,16 +111,26 @@ export async function retrieveThread(logContext: LogContext, userId: string, thr
  * @param userId - User ID to authenticate request
  * @returns Promise resolving to array of GmailThreads or undefined if none found
  */
-export async function retrieveUserThreads(logContext: LogContext, userId: string): Promise<GmailThread[] | undefined> {
+export async function getGmailThreads(logContext: LogContext, userId: string): Promise<GmailThread[] | undefined> {
     const access_token = await getAccessToken(logContext, userId);
     const { threads } = await listThreads(logContext, access_token, userId);
 
     if (!threads?.length) return undefined;
 
-    // Fetch all thread details in parallel
-    return Promise.all(
-        threads.map(({ id }) => getThread(logContext, access_token, userId, id!))
-    );
+    
+    const detailedThreadList : GmailThread[] = [];
+
+    for (const thread of threads) {
+        const detailedThread = await getThread(logContext, access_token, userId, thread.id);
+        detailedThreadList.push(detailedThread);
+    }
+
+    return detailedThreadList;
+
+    // // This code causes RateLimit from GoogleApi.
+    // return Promise.all(
+    //     threads.map(({ id }) => getThread(logContext, access_token, userId, id!))
+    // );
 }
 
 /**

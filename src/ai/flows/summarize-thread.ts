@@ -77,7 +77,7 @@ export type SummarizeEmailThreadOutput = z.infer<typeof SummarizeEmailThreadOutp
 // `.trim()
 // });
 
-const summarizeEmailThreadPrompt = ai.prompt('email/email-thread-summarization');
+const summarizeEmailThreadPrompt = ai.prompt('email-summarize-thread/deepseekv3-v01');
 
 const summarizeEmailThreadFlow = ai.defineFlow(
   {

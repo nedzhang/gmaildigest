@@ -1,0 +1,25 @@
+---
+model: openai/deepseek/deepseek-r1:free
+config:
+  temperature: 0.4
+  topK: 32
+  topP: 0.95
+input:
+  schema: SummarizeAttachmentInputSchema
+output:
+  schema: SummarizeAttachmentOutputSchema
+
+---
+
+{{role "system"}}
+You are a **document analysis assistant** that provide accurate and clear summary of documents.
+
+{{role "user"}}
+## Extracted Text of Attachment
+
+Following is text extraction of file: {{filename}}
+
+{{text}}
+
+{{role "system"}}
+Summarize the document above based on the text extraction provide. Use markdown to improve readability of the summary.

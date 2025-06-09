@@ -15,11 +15,13 @@ import {
 } from "./gduser-util";
 import { areStringListsEqual } from "./object-util";
 import { getAttachment } from "./gmail-util";
-import { summarizeAttachment } from "@/ai/flows/summarize-attachment";
 import { summarizeEmailFlow } from "@/ai/flows/summarize-message";
 import { summarizeEmailThread } from "@/ai/flows/summarize-thread";
 import { decodeBase64 } from "./string-util";
-import logger, { LogContext, makeLogEntry } from "@/lib/logger";
+import logger, { LogContext, LogEvent, makeLogEntry } from "@/lib/logger";
+import { threadId } from "worker_threads";
+import { extractText } from "./extract-text-util";
+import { summarizeText } from "@/ai/flows/summarize-text";
 
 /**
  * Recursively processes MIME parts to extract content and attachments
@@ -202,16 +204,22 @@ async function hydrateEmail(
     userId: string,
     message: GmailMessage,
 ): Promise<StandardEmail> {
+    const logEventBase: LogEvent = {
+        ...logContext,
+        module: "stdmail-util",
+        function: "hydrateEmail",
+        time: 0,
+        additional: {
+            ...logContext.additional,
+            userId,
+            messageId: message && message.id,
+        },
+    };
     // Check cache first to avoid redundant processing
     const emailAbs = await getEmailAbstract(logContext, userId, message.id);
     if (emailAbs?.summary) {
         logger.debug(makeLogEntry(
-            {
-                ...logContext,
-                time: Date.now(),
-                module: "stdmail-util",
-                function: "hydrateEmail",
-            },
+            { ...logEventBase, time: Date.now() },
             { emailAbsFromDb: emailAbs },
             "**hydrateEmail** email summary found in db. use it.",
         ));
@@ -221,31 +229,22 @@ async function hydrateEmail(
     // Full processing path when no cache exists
     const stdEmail = await parseGmailMessage(logContext, userId, message, true);
     logger.info(makeLogEntry(
-        {
-            ...logContext,
-            time: Date.now(),
-            module: "stdmail-util",
-            function: "hydrateEmail",
-        },
+        { ...logEventBase, time: Date.now() },
         { gmailMessage: message },
-        "Initiating AI summarization",
+        `**hydrateEmail** Initiating AI summarization message: ${message.id} of thread: ${message.threadId}`,
     ));
 
     const neoEmailAbs = await generateEmailSummary(logContext, stdEmail);
     await setEmailAbstract(logContext, userId, message.id, neoEmailAbs);
 
     logger.info(makeLogEntry(
-        {
-            ...logContext,
-            time: Date.now(),
-            module: "stdmail-util",
-            function: "hydrateEmail",
-        },
+        { ...logEventBase, time: Date.now() },
         {
             messageId: neoEmailAbs.messageId,
             dbThreadKey: neoEmailAbs.dbThreadKey,
+            summary: neoEmailAbs.summary,
         },
-        "Persisted new email summary",
+        `**hydrateEmail** Persisted new email summary for email: ${neoEmailAbs.messageId} thread: ${neoEmailAbs.dbThreadKey}`,
     ));
 
     return neoEmailAbs;
@@ -265,7 +264,15 @@ async function generateEmailSummary(
     // Process attachments first for comprehensive context
     for (const attachment of email.attachments || []) {
         if (!attachment.summary) {
-            const attachmentSummary = await summarizeAttachment(attachment);
+            const text = await extractText(logContext, attachment.filename, attachment.mimetype, attachment.data!);
+
+            if (!text || text.length < 400) {
+                throw new Error(`Failed to extract text from ${attachment.filename} mime: ${attachment.mimetype} text: ${text}`)
+            }
+            attachment.text = text;
+
+            const attachmentSummary = await summarizeText(attachment);
+            // const attachmentSummary = await summarizeAttachment(attachment);
             attachment.summary = attachmentSummary.summary;
         }
     }
@@ -301,12 +308,21 @@ export async function hydrateThread(
     userId: string,
     thread: GmailThread,
 ): Promise<StandardEmailThread> {
-    logger.info(makeLogEntry(
+    const logEventBase: LogEvent = {
+        ...logContext,
+        module: "stdmail-util",
+        function: "hydrateThread",
+        time: 0,
+        additional: {
+            ...logContext.additional,
+            userId,
+            threadId: thread?.id,
+        },
+    };
+    logger.debug(makeLogEntry(
         {
-            ...logContext,
+            ...logEventBase,
             time: Date.now(),
-            module: "stdmail-util",
-            function: "hydrateThread",
         },
         { userId, threadId: thread.id, snippet: thread.snippet },
         `**ThreadsSummarization** Started hydrating thread ${thread.id} for user ${userId}`,
@@ -316,27 +332,22 @@ export async function hydrateThread(
     const messageAbsMap: Record<string, StandardEmail> = {};
     let threadKey: string | undefined;
 
-
     // Process messages in sequence to maintain order
     for (const message of thread.messages) {
         const messageAbs = await hydrateEmail(logContext, userId, message);
 
-
         messageAbsMap[messageAbs.messageId!] = messageAbs;
-
 
         // Resolve thread key from existing messages
         if (messageAbs.dbThreadKey) {
             if (threadKey && threadKey !== messageAbs.dbThreadKey) {
                 logger.warn(makeLogEntry(
                     {
-                        ...logContext,
+                        ...logEventBase,
                         time: Date.now(),
-                        module: "stdmail-util",
-                        function: "hydrateThread",
                     },
                     { key1: threadKey, key2: messageAbs.dbThreadKey },
-                    "Thread key mismatch detected",
+                    `**hydrateThread** Thread key mismatch detected ${threadKey} ${messageAbs.dbThreadKey}`,
                 ));
             }
             threadKey = messageAbs.dbThreadKey;
@@ -373,10 +384,8 @@ export async function hydrateThread(
 
             logger.info(makeLogEntry(
                 {
-                    ...logContext,
+                    ...logEventBase,
                     time: Date.now(),
-                    module: "stdmail-util",
-                    function: "hydrateThread",
                 },
                 {},
                 `**hydrateThread** Call AI to summarize thread ${threadKey} with ${messageIds.length} messages`,
@@ -391,7 +400,7 @@ export async function hydrateThread(
     // attach the EmailAbstracts to the threadAbs
     threadAbs.messages = messageIds.map((id) => messageAbsMap[id]);
 
-    // Ensure message-thread relationship consistency by setting all the messages 
+    // Ensure message-thread relationship consistency by setting all the messages
     // that Gmail thinks are in this thread to have the same threadKey in our db.
     await Promise.all(messageIds.map(async (id) => {
         const mabs = messageAbsMap[id];
@@ -402,7 +411,7 @@ export async function hydrateThread(
     }));
 
     if (!threadAbs.summary) {
-        throw new Error("Thread summary generation failed");
+        throw new Error("**hydrateThread** Thread summary generation failed");
     }
 
     logger.info(makeLogEntry(

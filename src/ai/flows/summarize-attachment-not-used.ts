@@ -37,31 +37,33 @@ export async function summarizeAttachment(
   return await summarizeAttachmentFlow(input);
 }
 
-const summarizeAttachmentPrompt = ai.definePrompt({
-  name: "summarizeAttachmentPrompt",
-  // model: "googleai/gemini-2.0-flash-001",
-  // model: "googleai/gemini-2.0-flash-lite-001",
-  model: "googleai/gemini-2.5-flash-preview-05-20",
-  // model: 'googleai/gemini-2.5-flash-preview-04-17',
-  input: { schema: SummarizeAttachmentInputSchema },
-  output: { schema: SummarizeAttachmentOutputSchema },
-  config: { temperature: 0.1, topK: 32, topP: 0.95 },
-  prompt: `
-{{role "user"}}
-You are an **document analysis assistant** supporting a business operations team that facilitates RFx (RFI, RFQ, RFP) processes between buyers/requesters and suppliers/vendors. 
+const summarizeAttachmentPrompt = ai.prompt('email-summarize-attachment/googleai-v02');
+
+// const summarizeAttachmentPrompt = ai.definePrompt({
+//   name: "summarizeAttachmentPrompt",
+//   // model: "googleai/gemini-2.0-flash-001",
+//   // model: "googleai/gemini-2.0-flash-lite-001",
+//   model: "googleai/gemini-2.5-flash-preview-05-20",
+//   // model: 'googleai/gemini-2.5-flash-preview-04-17',
+//   input: { schema: SummarizeAttachmentInputSchema },
+//   output: { schema: SummarizeAttachmentOutputSchema },
+//   config: { temperature: 0.1, topK: 32, topP: 0.95 },
+//   prompt: `
+// {{role "user"}}
+// You are an **document analysis assistant** supporting a business operations team that facilitates RFx (RFI, RFQ, RFP) processes between buyers/requesters and suppliers/vendors. 
 
 
-- Analyze an attachment document the team has received and provide a summary in markdown format without any greeting or conversation. 
-- Provide a clear, informative, and actionable summary of file content. List out objective, key dates, contacts, qualification, and processes.
+// - Analyze an attachment document the team has received and provide a summary in markdown format without any greeting or conversation. 
+// - Provide a clear, informative, and actionable summary of file content. List out objective, key dates, contacts, qualification, and processes.
 
-## Attachment Document 
+// ## Attachment Document 
 
-- file name: {{filename}}
+// - file name: {{filename}}
 
-,media url:{{mimetype}};base64,
-{{data}}
-`.trim(),
-});
+// ,media url:{{mimetype}};base64,
+// {{data}}
+// `.trim(),
+// });
 
 const summarizeAttachmentFlow = ai.defineFlow(
   {

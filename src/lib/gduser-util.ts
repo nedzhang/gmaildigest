@@ -3,6 +3,7 @@
 import {
     addDoc,
     collection,
+    deleteDoc,
     doc,
     DocumentData,
     DocumentReference,
@@ -22,6 +23,7 @@ import { shallowCopyObjProperties } from "@/lib/object-util";
 import {
     GmailMessage,
     StandardEmail,
+    StandardEmailListSchema,
     StandardEmailSchema,
     StandardEmailThread,
     StandardEmailThreadSchema,
@@ -95,9 +97,10 @@ export async function updateToken(
             time: Date.now(),
             module: "gduser-util",
             function: "updateToken",
-        },  
+        },
         { userId, tokenId },
-        `**updateToken** Updating token for user ${userId}, token ${tokenId}`));
+        `**updateToken** Updating token for user ${userId}, token ${tokenId}`,
+    ));
 
     await updateDoc(tokenDoc, updatedTokens);
 
@@ -226,14 +229,14 @@ export async function getEmailAbstract(
 
     if (!emailDocSnap.exists()) return undefined;
 
-    return StandardEmailSchema.parse(await emailDocSnap.data());
+    return StandardEmailSchema.parse(emailDocSnap.data());
 }
 
 export async function setEmailAbstract(
     logContext: LogContext,
     userId: string,
     emailId: string,
-    data: StandardEmail,
+    emailAbs: StandardEmail,
 ): Promise<void> {
     const db = await getDb(logContext);
 
@@ -246,7 +249,14 @@ export async function setEmailAbstract(
     );
 
     // Validate and sanitize input using the schema (optional fields already handled)
-    const parsedData = StandardEmailSchema.partial().parse(data);
+    const parsedData = StandardEmailSchema.partial().parse(emailAbs);
+
+    if (parsedData.attachments) {
+        parsedData.attachments = parsedData.attachments.map((attachment) => {
+            const { data, ...attachmentWithoutData } = attachment;
+            return attachmentWithoutData;
+        });
+    }
 
     logger.info(makeLogEntry(
         {
@@ -256,15 +266,98 @@ export async function setEmailAbstract(
             function: "setEmailAbstract",
         },
         {
-            messageId: parsedData.messageId,
-            subject: parsedData.subject,
-            snippet: parsedData.snippet,
-            summary: parsedData.summary,
+            emailMessageToSet: parsedData,
         },
         `**setEmailAbstract** update emailAbs userId: ${userId}, emailId: ${emailId}`,
     ));
     // Create or update document with merge
     await setDoc(emailDocRef, parsedData, { merge: true });
+}
+
+export async function deleteEmailAbstract(
+    logContext: LogContext,
+    userId: string,
+    emailId: string,
+): Promise<void> {
+    const db = await getDb(logContext);
+
+    const emailDocRef = doc(
+        db,
+        getCollectionName("users"),
+        userId,
+        "emailabs",
+        emailId,
+    );
+
+    if (!emailDocRef) {
+        throw new Error(
+            `**deleteEmailAbstract** emailDocRef not exist for userId ${userId} and emailId ${emailId}`,
+        );
+    }
+
+    await deleteDoc(emailDocRef);
+
+    return;
+}
+
+export async function listUserThreadAbs(
+    logContext: LogContext,
+    userId: string,
+    loadMessage: boolean, // load email message abstracts into the thread. If not, only messageIds will be returned
+): Promise<StandardEmailThread[]> {
+    const db = await getDb(logContext);
+
+    const userThreadAbsColRef = collection(
+        db,
+        getCollectionName("users"),
+        userId,
+        "threadabs",
+    );
+
+    // get all threadabs document from the collection.
+    const snapshot = await getDocs(userThreadAbsColRef);
+
+    const threads: StandardEmailThread[] = [];
+
+    if (!logContext.additional) logContext.additional = { userId };
+
+    await Promise.all(snapshot.docs.map(async (doc) => {
+        const threadAbs = StandardEmailThreadSchema.parse(doc.data());
+
+        if (logContext.additional) {
+            logContext.additional["threadKey"] = threadAbs.dbThreadKey;
+        }
+
+        if (loadMessage) {
+            threadAbs.messages = [];
+            for (const messageId of threadAbs.messageIds) {
+                const emailAbs = await getEmailAbstract(
+                    logContext,
+                    userId,
+                    messageId,
+                );
+                if (emailAbs) {
+                    threadAbs.messages.push(emailAbs);
+                } else {
+                    logger.warn(makeLogEntry(
+                        {
+                            ...logContext,
+                            time: Date.now(),
+                            module: "gduser-util",
+                            function: "listUserThreadAbs",
+                        },
+                        {},
+                        `**listUserThreadAbs** Failed to get email abstract from DB for user: ${userId} messageId: ${messageId}`,
+                    ));
+                }
+            }
+        }
+        if (threadAbs) {
+            threads.push(threadAbs);
+        }
+    }));
+
+    return threads;
 }
 
 export async function getThreadAbstract(
@@ -333,7 +426,9 @@ export async function setThreadAbstract(
             function: "setThreadAbstract",
         },
         { parsedThreadAbs: parsedData },
-        `**setThreadAbstract** saving to DB user: ${userId} thread ${parsedData.dbThreadKey} for messages: ${JSON.stringify(parsedData.messageIds)}}`,
+        `**setThreadAbstract** saving to DB user: ${userId} thread ${parsedData.dbThreadKey} for messages: ${
+            JSON.stringify(parsedData.messageIds)
+        }}`,
     ));
     // Create or update document with merge
     await setDoc(threadDocRef, parsedData, { merge: true });

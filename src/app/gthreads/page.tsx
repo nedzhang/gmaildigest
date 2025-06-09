@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { GmailThread } from '@/types/gmail';
-import { retrieveUserThreads } from '@/lib/gmail-util'; // Assuming this function exists
+import { getGmailThreads } from '@/lib/gmail-util'; // Assuming this function exists
 import EmailThreadView from '@/components/thread/EmailThreadView';
 import { getSession } from '@/lib/session';
 import { getCurrentUserEmailThread } from './backend';

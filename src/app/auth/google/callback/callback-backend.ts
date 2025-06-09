@@ -4,10 +4,10 @@ import { processGoogleOAuth2Callback } from "@/lib/oauth2-util";
 import { updateUserLatestToken } from "@/lib/gduser-util";
 
 import { getSession } from "@/lib/session";
-import logger from "@/lib/logger";
+import logger, { LogContext, makeLogEntry } from "@/lib/logger";
 
 
-export async function googleOAuth2Callback(callbackUrl: string, code: string): Promise<void> {
+export async function googleOAuth2Callback(logContext: LogContext, callbackUrl: string, code: string): Promise<void> {
 
   const userAuthToken = await processGoogleOAuth2Callback({ callbackUrl }, code);
 
@@ -19,7 +19,7 @@ export async function googleOAuth2Callback(callbackUrl: string, code: string): P
       throw new Error('**googleOAuth2Callback** User email not found in token payload');
     } else {
       
-      await updateUserLatestToken(userAuthToken);
+      await updateUserLatestToken(logContext, userAuthToken);
 
       // const cookieStore = await cookies();
       // const session = await getIronSession(cookieStore, sessionOptions);
@@ -28,7 +28,12 @@ export async function googleOAuth2Callback(callbackUrl: string, code: string): P
       session.userEmail = email;
       session.isLoggedIn = true;
       await session.save();
-      logger.info('**googleOAuth2Callback** session saved: ', session);
+      logger.info(makeLogEntry({
+        ...logContext,
+        time: Date.now(),
+        module: 'callback-backend',
+        function: 'googleOAuth2Callback',
+      }, { session }, '**googleOAuth2Callback** session saved.'));
 
     }
   }

@@ -2,35 +2,30 @@
  * @jest-environment node
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 import {
   GmailMessage,
   GmailMessageSchema,
   GmailThread,
-  GmailThreadSchema,
   GmailThreadList,
   GmailThreadListSchema,
-} from '@/types/gmail';
-import { retrieveUserThreads } from './gmail-util'; // Assuming these are the exported functions
-import { LogContext } from './logger';
-import { generateId } from './uid-util';
+  GmailThreadSchema,
+} from "@/types/gmail";
+import { getGmailThreads } from "./gmail-util"; // Assuming these are the exported functions
+import logger, { LogContext, makeLogContext, makeLogEntry } from "./logger";
+import { generateId } from "./uid-util";
 
-describe('gmail-util', () => {
-  describe('parseGmailMessage', () => {
-
+describe("gmail-util", () => {
+  describe("parseGmailMessage", () => {
     const mockRequestId = generateId();
 
     const mockLogContext: LogContext = {
       requestId: mockRequestId,
-    }
+    };
 
-    it('should get user gmail threads from Gmail API', () => {
-
-      retrieveUserThreads(mockLogContext,
-        'ned.zhang@paracognition.ai'
-      )
-        .then(gmailThreadList => {
-
+    it("should get user gmail threads from Gmail API", () => {
+      getGmailThreads(mockLogContext, "ned.zhang@paracognition.ai")
+        .then((gmailThreadList) => {
           expect(gmailThreadList).toBeDefined();
           // expect(() => GmailThreadListSchema.parse(gmailThreadList)).not.toThrow();
           expect(gmailThreadList?.length).toBeGreaterThan(0);
@@ -41,15 +36,23 @@ describe('gmail-util', () => {
             expect(thread.historyId).toBeDefined();
             // expect(thread.snippet).toBeDefined();
             // expect(thread.messages).toBeDefined();
-
           });
 
+          logger.info(makeLogEntry(
+            {
+              ...mockLogContext,
+              time: Date.now(),
+              module: "gmail-util.test",
+              function: "parseGemaiMessage",
+            },
+            { gmailThreadList },
+            `**gmail-util.test** Retrieved user's gmails.`,
+          ));
         })
-        .catch(error => {
-          console.error('Error:', error);
+        .catch((error) => {
+          console.error("Error:", error);
         });
-
-    }, // 20 * 1000 // time out in 20 seconds
+    } // 20 * 1000 // time out in 20 seconds
     );
   });
 });

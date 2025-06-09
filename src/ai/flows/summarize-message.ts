@@ -96,7 +96,8 @@ import { ai } from '@/ai/genkit';
 // `.trim()
 // });
 
-const prompt = ai.prompt('email/summarize-message');
+const prompt = ai.prompt('email-summarize-message/deekseek-chatv3-v01');
+// const prompt = ai.prompt('email-summarize-message/googleai-v02');
 
 const flow = ai.defineFlow(
   {

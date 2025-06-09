@@ -1,6 +1,6 @@
 'use server'
 
-import { retrieveUserThreads } from "@/lib/gmail-util";
+import { getGmailThreads } from "@/lib/gmail-util";
 import logger, { LogContext } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { GmailThread } from "@/types/gmail";
@@ -15,7 +15,7 @@ export async function getCurrentUserEmailThread( requestId: string ): Promise<Gm
     }
 
     // Call the function to retrieve threads for the specified user
-    const userThreads = await retrieveUserThreads( 
+    const userThreads = await getGmailThreads( 
       { requestId,}, session.userEmail);
 
     // for testing purpose, we will store all the threads in file system 

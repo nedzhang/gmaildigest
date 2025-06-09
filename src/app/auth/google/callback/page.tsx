@@ -1,80 +1,68 @@
-'use client';
+// app/auth/google/callback/page.tsx
 
-import { useEffect, useState } from 'react';
-import { makeCallBackUrl } from '@/lib/client-util';
+'use server';
+
+import { redirect } from 'next/navigation';
+import CallbackUrlComponent from '@/components/auth/CallbackUrlComponent';
+// import { googleOAuth2CallbackServerAction } from './actions';
+import logger, { LogContext, makeLogEntry } from '@/lib/logger';
 import { googleOAuth2Callback } from './callback-backend';
-import logger from '@/lib/logger';
+import { headers } from 'next/headers';
 
-/**
- * Google OAuth2 callback page component
- * 
- * Handles the OAuth2 callback flow by:
- * 1. Extracting authorization code from URL parameters
- * 2. Validating the presence of the code
- * 3. Initiating server-side token exchange
- * 4. Handling success/error states appropriately
- */
-const GoogleCallbackPage = () => {
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+interface PageProps {
+  searchParams: { [key: string]: string | string[] | undefined };
+}
 
-  /**
-   * Process the OAuth2 callback when component mounts
-   */
-  useEffect(() => {
-    const processOAuthCallback = async () => {
-      try {
-        // Extract code from URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        const callbackUrl = makeCallBackUrl();
+export async function googleOAuth2CallbackServerAction(
+  logContext: LogContext,
+  callbackUrl: string,
+  code: string
+) {
+  try {
+    await googleOAuth2Callback(logContext, callbackUrl, code);
+  } catch (error) {
+    logger.error(makeLogEntry({
+      ...logContext,
+      time: Date.now(),
+      module: 'auth/google/callback/page',
+      function: 'googleOAuth2CallbackServerAction',
+    }, {err: error},
+      '**googleOauth2CallbackServerAction** OAuth processing failed:'));
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    throw new Error(message);
+  }
+}
 
-        if (!code) {
-          throw new Error('Authorization code missing from callback URL');
-        }
+const GoogleCallbackPage = async ({ searchParams }: PageProps) => {
+  const code = searchParams.code;
 
-        // Initiate server-side token exchange
-        await googleOAuth2Callback(callbackUrl, code);
-        setLoading(false);
-        
-      } catch (error) {
-        logger.error('OAuth processing failed:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error occurred';
-        window.location.replace(`/auth/error?message=${encodeURIComponent(message)}`);
-      }
-    };
+  const nextHeaders = await headers();
 
-    // Only run in browser context
-    if (typeof window !== 'undefined') {
-      processOAuthCallback();
-    }
-  }, []);
+  const requestId = nextHeaders.get('x-request-id') || '';
 
-  /**
-   * Render loading state while processing
-   */
-  if (loading) {
-    return (
-      <div className="p-4 text-center">
-        <p className="text-lg font-medium">Processing Google Authentication...</p>
-        {errorMessage && (
-          <p className="mt-2 text-red-500">Error: {errorMessage}</p>
-        )}
-      </div>
-    );
+  const logContext: LogContext = {
+    requestId,
   }
 
-  /**
-   * Successful state - could redirect here instead
-   */
+  // Validate code parameter
+  if (!code || Array.isArray(code)) {
+    logger.error(makeLogEntry({
+      ...logContext,
+      time: Date.now(),
+      module: 'auth/google/callback/page',
+      function: 'GoogleCallbackPage',
+    }, {}, '**GoogleBaclbackPage** Authorization code missing from callback URL'));
+
+    redirect(`/auth/error?message=${encodeURIComponent('Authorization code missing')}`);
+  }
+
   return (
-    <div className="p-4 text-center">
-      <p className="text-lg font-medium text-green-600">
-        Authentication successful! Redirecting...
-      </p>
-    </div>
+    <CallbackUrlComponent
+      logContext={logContext}
+      code={code}
+      serverAction={googleOAuth2CallbackServerAction}
+    />
   );
-  
 };
 
 export default GoogleCallbackPage;

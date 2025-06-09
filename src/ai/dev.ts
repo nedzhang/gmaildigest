@@ -1,10 +1,13 @@
 import { config } from 'dotenv';
 config();
 
-// import '@/ai/flows/summarize-email-thread.ts';
+import '@/ai/flows/summarize-thread';
 
-// import '@/ai/flows/summarize-attachment.ts'; 
+import '@/ai/flows/summarize-attachment'; 
 
-// import '@/ai/flows/summarize-email.ts';
+import '@/ai/flows/summarize-message';
 
-import '@/ai/schema/email.ts'
+import '@/ai/flows/summarize-text';
+
+import '@/ai/schema/email';
+ 

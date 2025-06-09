@@ -1,0 +1,34 @@
+---
+model: openai/deepseek/deepseek-chat-v3-0324:free
+config:
+  temperature: 0.4
+  topK: 32
+  topP: 0.95
+input:
+  schema: SummarizeAttachmentInputSchema
+output:
+  schema: SummarizeAttachmentOutputSchema
+
+---
+
+{{role "system"}}
+You are a **document summarization assistant**. 
+
+{{role "user"}}
+## Document
+
+Text extracted from file: {{filename}}
+
+**Text Starts**
+
+{{text}}
+
+**Text Ends**
+
+
+{{role "system"}}
+
+- Based on the text extraction above, generate an accurate and clear markdown style summary of document {{filename}}.  
+- Provide an Overview section in the summary.
+- If provided, list out requirements, qualification criteria, key dates, submission process, evaluation Criteria, and contacts. 
+- The summary needs to be markdown document.

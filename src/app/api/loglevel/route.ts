@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   logger.level = level;
   logger.info(`🔧 Log level changed to: ${level}`);
 
-  return NextResponse.json({ message: `Log level set to ${level}` });
+  return NextResponse.json({ message: `🔧 Log level set to ${level}` });
 }
 
 export async function GET() {

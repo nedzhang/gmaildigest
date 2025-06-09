@@ -1,11 +1,18 @@
 // uid-util.ts
 
+// TODO: add logic to allow caller to decide the length of the id. Currently
+// the id is 12 characters long (9 bytes (2^8) encode to Base64Url (2^6) = 9*8/6 = 12)
+// the caller should be able to request 8 characters (6 bytes) or 16 characters (12 bytes)
+// and the generateId should have the logic to distribute the bytes between random and timestamp
+//  - for 8 characters, we should have 2 bytes of random (65536 possibilities) and 4 bytes timestamp (49.7 days cycle)
+//  - for 12 characters, we should have 4 bytes of random (4,294,967,296 possibilities) and 5 bytes timestamp (34.8 years cycle)
+//  - for 16 characters, we should have 6 bytes of random (2.8E+14 possibilities) and 6 bytes timestamp (8920.6 years cycle)
 /**
  * Generates a unique ID combining cryptographic randomness and timestamp
  * @function generateId
  * @returns {string} A 12-character Base64URL-encoded string containing:
  * - 32-bit (4-byte) cryptographic random number
- * - 40-bit (5-byte) timestamp in milliseconds (lower bits)
+ * - 40-bit (5-byte) timestamp in milliseconds (lower bits) 
  * @example
  * // Returns a 12-character string like "A5Fg3j_81aBc"
  * const id = generateId();

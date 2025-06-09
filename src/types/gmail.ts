@@ -95,6 +95,7 @@ export const EmailAbstractAttachmentSchema = z.object({
     data: z.string().optional().describe("Base64-encoded content of the attachment."),
     summary: z.string().optional().describe("Summary of the attachment."),
     attachmentId: z.string().optional().describe("Attachment ID from Gmail."),
+    text: z.string().optional().describe("text presentation of the file (if it is extracted).")
   });
 
 export type EmailAbstractAttachment = z.infer<typeof EmailAbstractAttachmentSchema>;

@@ -1,6 +1,6 @@
 // emailThreadSummarization.ts
 
-import { retrieveUserThreads } from "@/lib/gmail-util";
+import { getGmailThreads } from "@/lib/gmail-util";
 import logger, { LogContext, makeLogContext, makeLogEntry } from "@/lib/logger";
 import { hydrateThread } from "@/lib/stdmail-util";
 import { generateId } from "@/lib/uid-util";
@@ -35,7 +35,7 @@ export async function runUserEmailThreadsSummarization(
         `**ThreadsSummarization** Starting UserEmailThreadsSummarization for user ${userId}`,
     ));
 
-    const threads = await retrieveUserThreads(runContext, userId);
+    const threads = await getGmailThreads(runContext, userId);
 
     if (!threads) {
         logger.warn(makeLogEntry(

@@ -7,19 +7,19 @@
  * @returns 
  */
 export function shallowCopyObjProperties(copyFrom: any, keysToKeep: string[]) {
-    return Object.keys(copyFrom)
-        .filter(key => keysToKeep.includes(key))
-        .reduce((acc: any, key: string) => {
-            if (copyFrom[key]) {
-                acc[key] = copyFrom[key];
-            }
-            return acc;
-        }, {});
+  return Object.keys(copyFrom)
+    .filter(key => keysToKeep.includes(key))
+    .reduce((acc: any, key: string) => {
+      if (copyFrom[key]) {
+        acc[key] = copyFrom[key];
+      }
+      return acc;
+    }, {});
 }
 
 export function reverseString(numString: string): string {
-    const reversedString = numString.split("").reverse().join("");
-    return reversedString;
+  const reversedString = numString.split("").reverse().join("");
+  return reversedString;
 }
 
 
@@ -35,4 +35,31 @@ export function areStringListsEqual(a: string[], b: string[]): boolean {
 export function hasProperty(obj: object): boolean {
 
   return !!obj && !(Object.keys(obj).length === 0);
+}
+
+
+/**
+ * remove fields that are null from the object to simplify the zod parsing process
+ * @param obj 
+ * @returns 
+ */
+export function removeNulls(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return undefined;
+  }
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(removeNulls).filter(val => val !== undefined);
+  }
+
+  // Handle objects
+  if (typeof obj === 'object') {
+    return Object.keys(obj).reduce((acc, key) => {
+      const value = removeNulls(obj[key]);
+      return value === undefined ? acc : { ...acc, [key]: value };
+    }, {});
+  }
+
+  return obj;
 }

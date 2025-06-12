@@ -2,11 +2,11 @@
  * @jest-environment node
  */
 
-import { listUserThreadAbs } from "./gduser-util";
-import logger, { LogContext, LogContextSchema, makeLogContext, makeLogEntry } from "./logger";
-import { generateId } from "./uid-util";
+import logger, { LogContext, LogContextSchema, makeLogContext, makeLogEntry } from "@/lib/logger";
+import { generateId } from "@/lib/uid-util";
+import { listUserThreadAbs } from "./thread-abs-store";
 
-describe("gduser-util", () => {
+describe("thread-abs-store", () => {
   describe("listUserThreadAbs", () => {
     const mockRequestId = generateId();
     const mockUserId = "ned.zhang@paracognition.ai".toLowerCase();

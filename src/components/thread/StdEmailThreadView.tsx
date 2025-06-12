@@ -7,7 +7,7 @@ import { StandardEmailThread } from '@/types/gmail';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Clipboard, ClipboardCheck, Trash2 } from 'lucide-react';
 import { LogContext } from '@/lib/logger';
-import { deleteEmailAbstract } from '@/lib/gduser-util';
+import { deleteEmailAbstract } from '@/lib/firestore/email-abs-store';
 
 interface EmailThreadViewProps {
   logContext: LogContext;

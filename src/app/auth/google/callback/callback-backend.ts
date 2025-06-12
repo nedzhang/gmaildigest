@@ -1,13 +1,21 @@
 'use server'
 
 import { processGoogleOAuth2Callback } from "@/lib/oauth2-util";
-import { updateUserLatestToken } from "@/lib/gduser-util";
 
 import { getSession } from "@/lib/session";
-import logger, { LogContext, makeLogEntry } from "@/lib/logger";
+import logger, { createLogger, LogContext } from "@/lib/logger";
+import { updateUserLatestToken } from "@/lib/firestore/token-store";
 
 
 export async function googleOAuth2Callback(logContext: LogContext, callbackUrl: string, code: string): Promise<void> {
+
+  const functionLogger = createLogger(logContext, {
+    module: 'callback-backend',
+    function: 'googleOAuth2Callback',
+    additional: {
+      callbackUrl
+    }
+  })
 
   const userAuthToken = await processGoogleOAuth2Callback({ callbackUrl }, code);
 
@@ -18,7 +26,7 @@ export async function googleOAuth2Callback(logContext: LogContext, callbackUrl: 
     if (!email) {
       throw new Error('**googleOAuth2Callback** User email not found in token payload');
     } else {
-      
+
       await updateUserLatestToken(logContext, userAuthToken);
 
       // const cookieStore = await cookies();
@@ -28,12 +36,7 @@ export async function googleOAuth2Callback(logContext: LogContext, callbackUrl: 
       session.userEmail = email;
       session.isLoggedIn = true;
       await session.save();
-      logger.info(makeLogEntry({
-        ...logContext,
-        time: Date.now(),
-        module: 'callback-backend',
-        function: 'googleOAuth2Callback',
-      }, { session }, '**googleOAuth2Callback** session saved.'));
+      functionLogger.info({ session }, '**googleOAuth2Callback** session saved.');
 
     }
   }

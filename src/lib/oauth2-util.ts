@@ -2,10 +2,10 @@
 
 import { OAuth2Client } from "google-auth-library";
 import { OAuthToken, OAuthTokenSchema } from "@/types/firebase";
-import { getUser, updateToken } from "./gduser-util";
-import { refreshToken } from "firebase-admin/app";
 import { shallowCopyObjProperties } from "./object-util";
-import logger, { LogContext, makeLogEntry } from "./logger";
+import logger, { createLogger, LogContext } from "./logger";
+import { getUser } from "./firestore/user-store";
+import { updateToken } from "./firestore/token-store";
 
 class UserAuthError extends Error {
     type: UserAuthError.ErrorType;
@@ -189,6 +189,13 @@ async function renewToken(
     googleClientId: string,
     refreshToken: string,
 ): Promise<OAuthToken> {
+    const functionLogger = createLogger(logContext,
+        {
+            module: "oauth2-util",
+            function: "renewToken",
+            additional: { googleClientId, refreshToken }
+        }
+    )
     const clientSecret = process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_SECRET;
 
     if (!clientSecret) {
@@ -213,15 +220,9 @@ async function renewToken(
 
     const newToken = OAuthTokenSchema.parse(await res.json());
 
-    logger.info(makeLogEntry(
-        {
-            ...logContext,
-            time: Date.now(),
-            module: "oauth2-util",
-            function: "renewToken",
-        },
+    functionLogger.info(
         { googleClientId, "expires_in": newToken.expires_in },
-        "**renewToken** token renewed with refreshToken"));
+        "**renewToken** token renewed with refreshToken");
     return newToken;
 }
 
@@ -262,6 +263,13 @@ export async function createOAuthUrl(
  * @throws Error if any required token or configuration is missing
  */
 export async function getAccessToken(logContext: LogContext, userId: string) {
+
+    const functionLogger = createLogger(logContext, {
+        module: "oauth2-util",
+        function: "getAccessToken",
+        additional: { userId }
+    });
+
     const BUFFER_SECONDS = 10; // 10 seconds buffer for tocken expiration. (renew at expire_at - 10 seconds)
 
     if (!process.env.FIREBASE_WEB_APP_GOOGLE_CLIENT_ID) {
@@ -291,32 +299,19 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
         user.latest_token.expires_at > nowInSeconds
     ) {
         // the access token is still active
-        logger.debug(makeLogEntry(
-            {
-                ...logContext,
-                time: Date.now(),
-                module: "oauth2-util",
-                function: "getAccessToken",
-            },
+        functionLogger.debug(
             {
                 nowInSeconds,
                 expires_at: user.latest_token.expires_at,
                 refresh_token_expires_at:
                     user.latest_token.refresh_token_expires_at,
             },
-            `**getAccessToken** access token is still active for "${userId}". Expires at ${new Date(user.latest_token.expires_at * 1000).toLocaleString()
-            } `,
-        ));
+            `**getAccessToken** access token is still active for "${userId}". Expires at ${new Date(user.latest_token.expires_at * 1000).toLocaleString()} `,
+        );
 
         return user.latest_token.access_token;
     } else { // the access token is not active
-        logger.debug(makeLogEntry(
-            {
-                ...logContext,
-                time: Date.now(),
-                module: "oauth2-util",
-                function: "getAccessToken",
-            },
+        functionLogger.debug(
             {
                 nowInSeconds,
                 expires_at: user.latest_token.expires_at,
@@ -326,7 +321,7 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
             `**getAccessToken** access token expired for "${userId}". Expired at ${new Date((user.latest_token.expires_at || 0) * 1000)
                 .toLocaleString()
             }`,
-        ));
+        );
 
         if (
             !user.latest_token.refresh_token ||
@@ -360,13 +355,7 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
                 tokensForUpdate,
             );
 
-            logger.debug(makeLogEntry(
-                {
-                    ...logContext,
-                    time: Date.now(),
-                    module: "oauth2-util",
-                    function: "getAccessToken",
-                },
+            functionLogger.debug(
                 {
                     nowInSeconds,
                     expires_at: tokensUpdated.expires_at,
@@ -376,7 +365,7 @@ export async function getAccessToken(logContext: LogContext, userId: string) {
                 `**getAccessToken** renewed token for "${userId}". New access token expires at ${new Date((tokensUpdated.expires_at || 0) * 1000)
                     .toLocaleString()
                 }`,
-            ));
+            );
 
             return newTokens.access_token;
         } else {

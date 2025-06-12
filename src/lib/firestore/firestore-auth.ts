@@ -15,8 +15,8 @@ import {
 } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { FirebaseServiceAccount } from "@/types/firebase";
-import SERVICE_ACCOUNT from "../../secret/firebase-admin-service-account.json";
-import logger, { LogContext, makeLogEntry } from "./logger";
+import SERVICE_ACCOUNT from "../../../secret/firebase-admin-service-account.json";
+import logger, { createLogger, LogContext } from "../logger";
 
 // Firebase client configuration from environment variables
 const firebaseConfig = {
@@ -45,12 +45,12 @@ function initializeAdminApp(): App {
             credential: admin.credential.cert(SERVICE_ACCOUNT as ServiceAccount),
         });
     }
-    
+
     const adminApps = getAdminApps();
     if (adminApps.length === 0) {
         throw new Error("**initializeAdminApp** Firebase Admin app initialization failed - no apps available");
     }
-    
+
     return adminApps[0];
 }
 
@@ -60,16 +60,16 @@ function initializeAdminApp(): App {
  * @throws {Error} If client app initialization fails
  */
 function initializeFirebaseApp(): FirebaseApp {
-    
+
     if (!getFirebaseApps().length) {
         initializeApp(firebaseConfig);
     }
-    
+
     const firebaseApps = getFirebaseApps();
     if (firebaseApps.length === 0) {
         throw new Error("**initializeFirebaseApp** Firebase client app initialization failed - no apps available");
     }
-    
+
     return firebaseApps[0];
 }
 
@@ -86,17 +86,17 @@ async function authenticateWithServiceAccount(
     serviceAccount: FirebaseServiceAccount
 ): Promise<{ auth: Auth; userCred: UserCredential }> {
     const uid = serviceAccount.client_email;
-    
-    logger.info(makeLogEntry(
-        {
-            ...logContext,
-            module: 'firestore-auth',
-            function: 'authenticateWithServiceAccount',
-            time: Date.now(),
-        }, 
+
+    const functionLogger = createLogger(logContext, {
+        ...logContext,
+        module: 'firestore-auth',
+        function: 'authenticateWithServiceAccount',
+    });
+
+    functionLogger.info(
         {},
         `**authenticateWithServiceAccount** Initiating authentication for service account: ${uid}`
-    ));
+    );
 
     const customToken = await admin.auth().createCustomToken(uid);
     const auth = getAuth(app);
@@ -123,40 +123,33 @@ async function performSignIn(logContext: LogContext): Promise<{ auth: Auth; user
  * @throws {Error} If authentication fails or ID token is unavailable
  */
 export async function getDb(logContext: LogContext, forceNew: boolean = false, reAuth: boolean = false): Promise<Firestore> {
+
+    const functionLogger = createLogger(logContext,
+        { module: "firestore-auth", function: "getDb", additional: { forceNew, reAuth } }
+    );
+
     // Reuse existing auth if available
     if (reAuth || !authInstance || !userCredential) {
         const { auth: newAuth, userCred: newUserCred } = await performSignIn(logContext);
         authInstance = newAuth;
         userCredential = newUserCred;
-        
-        logger.trace(makeLogEntry(
+
+        functionLogger.trace(
             {
-                ...logContext,
-                time: Date.now(),
-                module: "firestore-auth",
-                function: "getDb",
-            },
-            { 
                 currentUser: authInstance.currentUser?.uid,
-                userCredential: userCredential.user.uid 
+                userCredential: userCredential.user.uid
             },
             "**getDb** Successfully established authentication"
-        ));
+        );
     }
 
     // Verify valid authentication token
     const idToken = await authInstance.currentUser?.getIdToken();
-    
-    logger.trace(makeLogEntry(
-        {
-            ...logContext,
-            time: Date.now(),
-            module: "firestore-auth",
-            function: "getFirestoreDatabase",
-        },
+
+    functionLogger.trace(
         { tokenLength: idToken?.length || 0 },
         "**getDb** Retrieved firebase authentication token"
-    ));
+    );
 
     if (!idToken) {
         throw new Error("**getDb** Failed to obtain valid authentication token");

@@ -1,9 +1,8 @@
 'use server';
 
-import { getUser } from "@/lib/gduser-util";
 import { GmailThread, GmailThreadList, GmailThreadListSchema, GmailThreadSchema, GRestErrorSchema } from "@/types/gmail";
 import { getAccessToken } from "./oauth2-util";
-import logger, { LogContext, makeLogEntry } from "./logger";
+import logger, { createLogger, LogContext } from "./logger";
 
 const GOOGLE_API_URL = 'https://www.googleapis.com/gmail/v1';
 
@@ -33,13 +32,14 @@ function checkGRestResponse<T>(response: any): T {
  * @returns Promise resolving to GmailThreadList
  */
 async function listThreads(logContext: LogContext, accessToken: string, userId: string): Promise<GmailThreadList> {
-    logger.debug(makeLogEntry({
-        ...logContext,
-        time: Date.now(),
+
+    const functionLogger = createLogger(logContext, {
         module: "gmail-util",
         function: "listThreads",
-    }, {
-    }, `**listThreads** Started listing threads for user ${userId}`));
+        additional: { userId }
+    });
+
+    functionLogger.debug({}, `**listThreads** Started listing threads for user ${userId}`);
 
     const response = await fetch(`${GOOGLE_API_URL}/users/${userId}/threads`, {
         headers: { Authorization: `Bearer ${accessToken}` }
@@ -47,14 +47,9 @@ async function listThreads(logContext: LogContext, accessToken: string, userId: 
     // return response.json();
     const threadList = checkGRestResponse<GmailThreadList>(await response.json());
 
-    logger.info(makeLogEntry({
-        ...logContext,
-        time: Date.now(),
-        module: "gmail-util",
-        function: "listThreads",
-    }, {
+    functionLogger.info({
         threadList
-    }, `**listThreads** Retrieved simple thread list for user ${userId}`));
+    }, `**listThreads** Retrieved simple thread list for user ${userId}`);
 
     return threadList;
 }
@@ -67,28 +62,25 @@ async function listThreads(logContext: LogContext, accessToken: string, userId: 
  * @returns Promise resolving to GmailThread
  */
 async function getThread(logContext: LogContext, accessToken: string, userId: string, threadId: string): Promise<GmailThread> {
-    logger.debug(makeLogEntry({
-        ...logContext,
-        time: Date.now(),
+
+    const functionLogger = createLogger(logContext, {
         module: "gmail-util",
         function: "getThread",
-    }, {
+        additional: { userId, threadId }
+    });
+
+    functionLogger.debug({
         userId, threadId
-    }, `**getThread** Started retrieving thread ${threadId} for user ${userId}`));
+    }, `**getThread** Started retrieving thread ${threadId} for user ${userId}`);
 
     const response = await fetch(`${GOOGLE_API_URL}/users/${userId}/threads/${threadId}`, {
         headers: { Authorization: `Bearer ${accessToken}` }
     });
     const thread = checkGRestResponse<GmailThread>(await response.json());
 
-    logger.info(makeLogEntry({
-        ...logContext,
-        time: Date.now(),
-        module: "gmail-util",
-        function: "getThread",
-    }, {
+    functionLogger.info({
         thread
-    }, `**getThread** Retrieved thread ${threadId} for user ${userId}`));
+    }, `**getThread** Retrieved thread ${threadId} for user ${userId}`);
 
     return thread;
 }
@@ -117,8 +109,8 @@ export async function getGmailThreads(logContext: LogContext, userId: string): P
 
     if (!threads?.length) return undefined;
 
-    
-    const detailedThreadList : GmailThread[] = [];
+
+    const detailedThreadList: GmailThread[] = [];
 
     for (const thread of threads) {
         const detailedThread = await getThread(logContext, access_token, userId, thread.id);

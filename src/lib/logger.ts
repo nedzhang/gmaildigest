@@ -1,164 +1,130 @@
-// lib/logger.ts
-/**
- * Centralized Logging Module
- *
- * Implements structured logging with:
- * - Environment-specific configurations (development/production)
- * - Multiple transport targets (console, Logtail)
- * - Zod schema validation for log sources
- * - Safe request serialization
- * - Type-safe log entry construction
- *
- * Designed for optimal performance with Pino's low-overhead logging
- */
-
-import pino from "pino";
+import pino, { Logger } from "pino";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { hasProperty } from "./object-util";
 
-// Constants for environment detection
+// Environment Configuration Checks
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const IS_TEST = process.env.NODE_ENV === "test";
-
-const LOGTAIL_CONFIGURED =
-  !!(process.env.LOGTAIL_TOKEN && process.env.LOGTAIL_ENDPOINT);
+const HAS_LOGTAIL = !!(process.env.LOGTAIL_TOKEN && process.env.LOGTAIL_ENDPOINT);
 
 /**
- * Zod Schema Definitions
+ * Logging Schema Definitions
  *
- * Ensures consistent log structure across:
- * - Frontend components
- * - Middleware
- * - API routes
+ * Structured field definitions to ensure consistent logging
+ * formats across our application
  */
 export const LogContextSchema = z.object({
-  requestId: z.string().describe("Unique identifier for request tracing"),
+  requestId: z.string().describe("Unique request identifier"),
   additional: z.record(z.string(), z.unknown())
     .optional()
-    .describe("Additional context-specific metadata"),
+    .describe("Context-specific metadata"),
 });
 
 export const LogEventSchema = LogContextSchema.extend({
-  time: z.number().describe("Unix timestamp in milliseconds"),
-  module: z.string().describe("Originating module/component"),
-  function: z.string().describe("Source function/method name"),
-  level: z.string().optional().describe("Log level (trace, debug, info, warn, error)"),
+  time: z.number().describe("Milliseconds since epoch"),
+  module: z.string().describe("Source module name"),
+  function: z.string().describe("Function name").default('global'),
+  level: z.string().optional().describe("Log severity level"),
+  runtime: z.string().optional().describe('run time of the event. could be node, edge, or browser.')
 });
 
 export type LogContext = z.infer<typeof LogContextSchema>;
 export type LogEvent = z.infer<typeof LogEventSchema>;
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | string;
 
 /**
- * Type-safe request serializer that handles:
- * - NextRequest objects
- * - Plain request-like objects
- * - Sensitive header filtering
- * - Consistent path resolution
+ * Enhanced Child Logger Interface
+ *
+ * Provides both method-based logging (info, warn, etc) and
+ * generic level-based logging interface
  */
-export const reqSerializer = (req: NextRequest | Record<string, unknown>) => {
-  return {
-    method: (req as NextRequest).method || "unknown",
-    url: req.url?.toString() || "unknown",
-    path: getRequestPath(req),
-    headers: getSafeHeaders(req),
-  };
-};
+export interface ChildLogger {
+  (level: LogLevel, context: Record<string, unknown>, message?: string): void;
+  trace: (context: Record<string, unknown>, message?: string) => void;
+  debug: (context: Record<string, unknown>, message?: string) => void;
+  info: (context: Record<string, unknown>, message?: string) => void;
+  warn: (context: Record<string, unknown>, message?: string) => void;
+  error: (context: Record<string, unknown>, message?: string) => void;
+  fatal: (context: Record<string, unknown>, message?: string) => void;
+  createChild: (context: Partial<Omit<LogEvent, 'requestId' | 'time'>>) => ChildLogger;
+  getBaseEvent: () => LogEvent;
+}
 
 /**
- * Constructs standardized log entries with:
- * - Zod-validated source metadata
- * - Environment context (server/client)
- * - Type-safe context object merging
- * - Message normalization
+ * Request Serialization Utilities
+ *
+ * Cleanly formats request objects for logging, including
+ * security-conscious header handling
  */
-export function makeLogEntry(
-  event: LogEvent,
-  content: Record<string, unknown>,
-  message?: string,
-): Record<string, unknown> {
-  const entry: Record<string, unknown> = {
-    logsource: {
-      ...event,
-      runtime: process.env.NEXT_RUNTIME || "unknown",
-    },
-    ...content,
-  };
+const isNextRequest = (req: unknown): req is NextRequest =>
+  !!(req && typeof (req as NextRequest).headers?.get === 'function');
 
-  if (!!message) {
-    entry.message = (!!entry.message) ? entry.message + " " + message : message;
-  }
+export const reqSerializer = (req: NextRequest | Record<string, unknown>) => ({
+  method: (req as NextRequest).method || "unknown",
+  url: req.url?.toString() || "unknown",
+  path: getRequestPath(req),
+  headers: getSanitizedHeaders(req),
+});
 
-  return entry;
-}
-
-// Helper function to safely extract headers
-function getSafeHeaders(
-  req: NextRequest | Record<string, any>,
-): Record<string, string | null> {
-  const headers: Record<string, string | null> = {};
-  const safeHeaders = [
-    "host",
-    "user-agent",
-    "referer",
-    "content-type",
-    "x-request-id",
-    "x-forwarded-for",
-  ];
-
-  if (isNextRequest(req)) {
-    safeHeaders.forEach((key) => headers[key] = req.headers.get(key));
-  } else if (req.headers) {
-    safeHeaders.forEach((key) => {
-      headers[key] = req.headers[key.toLowerCase()] || req.headers[key] || null;
-    });
-  }
-
-  return headers;
-}
-
-// Type guard for NextRequest detection
-function isNextRequest(req: unknown): req is NextRequest {
-  return !!(
-    req &&
-    typeof (req as NextRequest).headers?.get === "function" &&
-    typeof (req as NextRequest).nextUrl === "object"
-  );
-}
-
-// Unified path resolution logic
-function getRequestPath(req: NextRequest | Record<string, any>): string {
-  if (isNextRequest(req) && req.nextUrl?.pathname) {
-    return req.nextUrl.pathname;
-  }
-
+const getRequestPath = (req: NextRequest | Record<string, any>): string => {
+  if (isNextRequest(req) && req.nextUrl?.pathname) return req.nextUrl.pathname;
   try {
     return req.url ? new URL(req.url.toString()).pathname : "unknown";
   } catch {
     return "invalid-url";
   }
+};
+
+const getSanitizedHeaders = (
+  req: NextRequest | Record<string, any>
+): Record<string, string | null> => {
+  const headersToKeep = ["host", "user-agent", "referer", "content-type"];
+  const headers: Record<string, string | null> = {};
+
+  if (isNextRequest(req)) {
+    headersToKeep.forEach(key => headers[key] = req.headers.get(key));
+  } else if (req.headers) {
+    headersToKeep.forEach(key => {
+      const value = req.headers[key.toLowerCase()] || req.headers[key];
+      headers[key] = typeof value === 'string' ? value : null;
+    });
+  }
+
+  return headers;
+};
+
+/**
+ * Semantic Field Constructor
+ * 
+ * Creates structured log entries with consistent top-level field names,
+ * keeping source context and log content separate
+ */
+export function createLogEntry(
+  event: LogEvent,
+  context: Record<string, unknown>,
+  message?: string
+): Record<string, unknown> {
+  return {
+    logsource: {
+      ...event,
+      runtime: process.env.NEXT_RUNTIME || "unknown-nodejs",
+    },
+    ...context,
+    ...(message && { message }),
+  };
 }
 
-// Transport configuration optimized for performance
-function configureTransports(): pino.TransportTargetOptions[] {
-  const transports: pino.TransportTargetOptions[] = [];
+/**
+ * Transport Configuration Manager
+ *
+ * Configures appropriate logging sinks for the current environment
+ */
+const configureTransports = (): pino.TransportTargetOptions[] => {
+  const sinks: pino.TransportTargetOptions[] = [];
 
-  if (IS_PRODUCTION) {
-    // Production default: JSON-formatted console logs
-    transports.push({
-      target: "pino/file",
-      level: "info",
-      options: { destination: 1 }, // stdout
-    });
-  }else if (IS_TEST) {
-    // We don't want too large log message to contaiminate the test output.
-    transports.push({
-      target: "pino/file",
-      level: "error",
-      options: { destination: 1 }, // stdout
-    });
-  } else {
-    transports.push({
+  // Development - Pretty-printed to stdout
+  if (!IS_PRODUCTION && !IS_TEST) {
+    sinks.push({
       target: "pino-pretty",
       level: "debug",
       options: {
@@ -168,60 +134,193 @@ function configureTransports(): pino.TransportTargetOptions[] {
       },
     });
   }
+  // Production & Test - Structured JSON
+  else {
+    sinks.push({
+      target: "pino/file",
+      level: IS_TEST ? "trace" : "info",
+      options: { destination: 1 }, // stdout
+    });
+  }
 
-  // We would like to have logtail in all environments
-  if (LOGTAIL_CONFIGURED) {
-    transports.push({
+  // Third-party logging service
+  if (HAS_LOGTAIL) {
+    sinks.push({
       target: "@logtail/pino",
       level: "trace",
       options: {
         sourceToken: process.env.LOGTAIL_TOKEN!,
-        options: {
-          endpoint: process.env.LOGTAIL_ENDPOINT!,
-        },
+        options: { endpoint: process.env.LOGTAIL_ENDPOINT! },
       },
     });
   }
 
-  return transports;
-}
+  return sinks;
+};
 
-// Logger instance with optimized configuration
-const logger = pino({
-  level: IS_PRODUCTION ? "trace" : "trace", // Have logger always log trace level and let transport decide what level to transport out.
+// Core Logger Instance
+const baseLogger = pino({
+  level: "trace", // Inherit level control from transports
   serializers: {
     err: pino.stdSerializers.err,
     req: reqSerializer,
     res: pino.stdSerializers.res,
   },
   transport: {
-    targets: configureTransports(),
+    targets: configureTransports()
   },
 });
 
-// Runtime configuration validation
-if (IS_PRODUCTION && !LOGTAIL_CONFIGURED) {
-  logger.warn("Production logging operating in fallback mode (stdout only)");
+// Configuration warnings
+if (IS_PRODUCTION && !HAS_LOGTAIL) {
+  console.warn("Production logging using stdout fallback");
 }
 
-export function makeLogContext(context: { req?: NextRequest, requestId?: string, additional?: Record<string, unknown> }) {
+/**
+ * Context Initializer
+ *
+ * Creates logging context from request objects or explicit parameters
+ */
+export function createLogContext(params: {
+  req?: NextRequest;
+  requestId?: string;
+  additional?: Record<string, unknown>;
+}): LogContext {
+  const requestId = params.requestId || params.req?.headers.get("x-request-id") || "";
+  if (!requestId) throw new Error("Missing request ID for logging context");
 
-  const id = context.requestId || context.req?.headers.get("x-request-id") || "";
+  return {
+    requestId,
+    ...(params.additional && { additional: params.additional }),
+  };
+}
 
-  if (!id) {
-    throw new Error(`**makeLogContext** both req and requestId are undefined.`);
+/**
+ * Child Logger Factory
+ *
+ * Creates scoped logger instances with contextual metadata inheritance
+ */
+export function createLogger(
+  parentContext: LogContext,
+  config: Partial<Omit<LogEvent, 'requestId' | 'time'>> = {}
+): ChildLogger {
+  if (!config.module) {
+    console.warn("Creating logger without explicit module name. Recommend setting module.");
   }
 
-  const ctx: LogContext = {
-    requestId: id,
+  // Merge metadata from parent context and current config
+  const metadata = {
+    ...(parentContext.additional || {}),
+    ...(config.additional || {})
   };
 
-  if (context.additional && hasProperty(context.additional as object)) {
-    ctx.additional = context.additional;
-  }
+  // Base fields for all log entries
+  const eventTemplate: LogEvent = {
+    requestId: parentContext.requestId,
+    time: 0, // Populated at log time
+    module: config.module || 'uncategorized',
+    function: config.function || 'global',
+    ...(Object.keys(metadata).length > 0 && { additional: metadata })
+  };
 
-  return ctx
+  const pinoChild = baseLogger.child({});
+
+  /**
+   * Flexible Logging Core
+   * 
+   * Handles all actual log writing with support for both
+   * standard and custom log levels
+   */
+  const log = (
+    level: LogLevel,
+    context: Record<string, unknown>,
+    message?: string
+  ): void => {
+    const timestamp = Date.now();
+    const runtime = process.env.NEXT_RUNTIME || 'unknown';
+    const logEvent: LogEvent = { ...eventTemplate, time: timestamp, level, runtime };
+    const logEntry = createLogEntry(logEvent, context, message);
+
+    // Standard level handling
+    switch (level) {
+      case 'fatal': return pinoChild.fatal(logEntry);
+      case 'error': return pinoChild.error(logEntry);
+      case 'warn': return pinoChild.warn(logEntry);
+      case 'info': return pinoChild.info(logEntry);
+      case 'debug': return pinoChild.debug(logEntry);
+      case 'trace': return pinoChild.trace(logEntry);
+    }
+
+    // Custom level handling
+    const loggerWithCustomTypes = pinoChild as unknown as Record<string, pino.LogFn | undefined>;
+    const logMethod = loggerWithCustomTypes[level];
+
+    if (typeof logMethod === 'function') {
+      try {
+        logMethod(logEntry);
+      } catch (error) {
+        pinoChild.warn({
+          ...logEntry,
+          logFailure: 'Custom level logging failed',
+          customLevel: level,
+          error
+        }, `Logging failed for custom level: ${level}`);
+      }
+    } else {
+      // Fallback with explicit custom level field
+      pinoChild.info({
+        ...logEntry,
+        customLogLevel: level
+      }, message);
+    }
+  };
+
+  // Create public interface
+  const loggerInterface = ((level: LogLevel, ctxt: Record<string, unknown>, msg?: string) => {
+    log(level, ctxt, msg);
+  }) as ChildLogger;
+
+  // Standard level shorthand methods
+  loggerInterface.trace = (c, m) => log('trace', c, m);
+  loggerInterface.debug = (c, m) => log('debug', c, m);
+  loggerInterface.info = (c, m) => log('info', c, m);
+  loggerInterface.warn = (c, m) => log('warn', c, m);
+  loggerInterface.error = (c, m) => log('error', c, m);
+  loggerInterface.fatal = (c, m) => log('fatal', c, m);
+
+  /**
+   * Child Logger Generator
+   * 
+   * Creates nested loggers with merged context
+   */
+  loggerInterface.createChild = (childConfig) => {
+    // Maintain core context
+    const newContext: LogContext = {
+      requestId: parentContext.requestId,
+      ...(Object.keys(metadata).length > 0 && { additional: metadata })
+    };
+
+    // Merge additional metadata hierarchically
+    const childMetadata = {
+      ...metadata,
+      ...(childConfig.additional || {})
+    };
+
+    return createLogger(
+      newContext,
+      {
+        ...config,
+        ...childConfig,
+        // Pass merged metadata
+        additional: Object.keys(childMetadata).length ? childMetadata : undefined
+      }
+    );
+  };
+
+  // Accessor for base event data
+  loggerInterface.getBaseEvent = () => ({ ...eventTemplate });
+
+  return loggerInterface;
 }
 
-
-export default logger;
+export default baseLogger;

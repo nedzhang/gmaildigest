@@ -2,7 +2,7 @@
 
 "use server";
 
-import logger, { makeLogContext, makeLogEntry } from "@/lib/logger";
+import logger, { createLogContext, createLogger } from "@/lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 
 /**
@@ -21,6 +21,16 @@ export async function POST(
     req: NextRequest,
     { params }: { params: { slug: string[] } },
 ) {
+
+    const logContext = createLogContext({
+        req
+    });
+
+    const functionLogger = createLogger(logContext, {
+        module: 'openai-proxy/[...slug]/route',
+        function: 'POST',
+    })
+
     const slugs = (await params).slug; // `params` should be awaited before using its properties. Learn more: https://nextjs.org/docs/messages/sync-dynamic-apis
     const queryParams = req.nextUrl.searchParams;
 
@@ -40,20 +50,12 @@ export async function POST(
         );
     }
 
-    const logContext = makeLogContext({
-        requestId: req.headers.get("x-request-id") as string,
-    });
 
-    logger.info(makeLogEntry(
-        {
-            ...logContext,
-            time: Date.now(),
-            module: "openai-proxy",
-            function: "handler",
-        },
+
+    functionLogger.info(
         { slugs, queryParams },
         `**openai-proxy/handler** received openai request`,
-    ));
+    );
 
     try {
         // Construct target URL
@@ -76,16 +78,16 @@ export async function POST(
             headers.set("Content-Type", "application/json");
         }
 
-                // NEW: Capture request body for logging
+        // NEW: Capture request body for logging
         let bodyForLog: any = null;
         let bodyToForward = req.body;
-        
+
         if (req.body) {
             try {
                 // Create a clone of the body to read for logging
                 const [logStream, forwardStream] = req.body.tee();
                 bodyToForward = forwardStream;
-                
+
                 const reader = logStream.getReader();
                 const decoder = new TextDecoder();
                 let bodyText = '';
@@ -112,22 +114,16 @@ export async function POST(
                 bodyForLog = bodyText;
                 reader.releaseLock();
             } catch (e: any) {
-                bodyForLog = `Error reading body: ${e.message || e }`;
+                bodyForLog = `Error reading body: ${e.message || e}`;
             }
         }
 
 
         // Debug: Log request before forwarding
-        logger.debug(makeLogEntry(
-            {
-                ...logContext,
-                time: Date.now(),
-                module: "openai-proxy",
-                function: "POST",
-            },
+        functionLogger.debug(
             { headers: Object.fromEntries(headers.entries()), body: bodyForLog },
             `**openai-proxy** Request send to ${targetUrl}`,
-        ));
+        );
 
         // Forward request to OpenAI with compression handling
         const response = await fetch(targetUrl, {
@@ -145,20 +141,14 @@ export async function POST(
 
         // Handle streaming responses
         if (isStreaming && response.body) {
-            logger.debug(makeLogEntry(
-                {
-                    ...logContext,
-                    time: Date.now(),
-                    module: "openai-proxy",
-                    function: "POST",
-                },
+            functionLogger.debug(
                 {
                     status: response.status,
                     headers: Object.fromEntries(response.headers.entries()),
                     note: "Streaming response - body not logged",
                 },
                 `Streaming response from OpenAI: ${targetUrl}`,
-            ));
+            );
 
             return new Response(response.body, {
                 headers: response.headers,
@@ -171,33 +161,23 @@ export async function POST(
                 responseData = await response.json();
 
                 // NEW: Log non-streaming response body
-                logger.debug(makeLogEntry(
+                functionLogger.debug(
                     {
-                        ...logContext,
-                        time: Date.now(),
-                        module: "openai-proxy",
-                        function: "POST",
+                        status: response.status,
+                        headers: Object.fromEntries(response.headers.entries()),
+                        responseBody: responseData
                     },
-                    {                     status: response.status,
-                    headers: Object.fromEntries(response.headers.entries()),
-                    responseBody: responseData },
                     `**openai-proxy** text response from OpenAI: ${targetUrl}`,
-                ));
+                );
             }
 
             return NextResponse.json(responseData, { status: response.status });
         }
     } catch (error: any) {
-        logger.error(makeLogEntry(
-            {
-                ...logContext,
-                time: Date.now(),
-                module: "openai-proxy",
-                function: "POST",
-            },
+        functionLogger.error(
             { err: error },
             `**openai-proxy/POST** proxy error:`,
-        ));
+        );
 
         return NextResponse.json(
             {

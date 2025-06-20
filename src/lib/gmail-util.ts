@@ -1,8 +1,8 @@
 'use server';
 
-import { GmailThread, GmailThreadList, GmailThreadListSchema, GmailThreadSchema, GRestErrorSchema } from "@/types/gmail";
+import { GmailThread, GmailThreadList, GRestErrorSchema } from "@/types/gmail";
 import { getAccessToken } from "./oauth2-util";
-import logger, { createLogger, LogContext } from "./logger";
+import { createLogger, LogContext } from "./logger";
 
 const GOOGLE_API_URL = 'https://www.googleapis.com/gmail/v1';
 

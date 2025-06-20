@@ -13,7 +13,7 @@ const SummarizeTextInputSchema = EmailAbstractAttachmentSchema
 
 type SummarizeTextInput = z.infer<typeof SummarizeTextInputSchema>;
 
-ai.defineSchema("SummarizeTextInput", SummarizeTextInputSchema);
+ai.defineSchema("SummarizeTextInputSchema", SummarizeTextInputSchema);
 
 const SummarizeTextOutputSchema = z.object({
   summary: z.string().describe("A summary of the attachment."),
@@ -23,7 +23,7 @@ export type SummarizeTextOutput = z.infer<
   typeof SummarizeTextOutputSchema
 >;
 
-ai.defineSchema("SummarizeTextOutput", SummarizeTextOutputSchema);
+ai.defineSchema("SummarizeTextOutputSchema", SummarizeTextOutputSchema);
 
 const summarizeTextPrompt = ai.prompt(
   "email-summarize-attachment/deepseekv3text-v03",

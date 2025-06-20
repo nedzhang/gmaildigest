@@ -1,12 +1,12 @@
 import { jsonifyError } from '@/lib/error-util';
-import { setTaskAbs } from '@/lib/firestore/task-store';
-import logger, { createLogContext, createLogger, LogContext } from '@/lib/logger';
+import { getTaskAbs as getTaskFromDB } from '@/lib/firestore/task-store';
+import { createLogContext, createLogger, LogContext } from '@/lib/logger';
 import { TokenRequestError } from '@/lib/taskboard/vikunja-auth';
 import { getNotifications, getTask as getTaskFromPB } from '@/lib/taskboard/vikunja-int';
 import { NotificationsArray, Task } from '@/lib/taskboard/vikunja-schema';
-import { getTaskAbs } from '@/lib/firestore/task-store';
 import { NextRequest, NextResponse } from 'next/server';
-import { reviewTaskList } from '@/job/taskSummarization';
+import { nbaTaskList } from '@/job/taskSummarization';
+import { deepMergeObjects as deepMergeObjects } from '@/lib/object-util';
 
 const MAX_PAGES = 200; // Safeguard against infinite loops
 
@@ -56,14 +56,14 @@ async function processNotifications(logContext: LogContext) {
 
 async function addToTaskList(notifications: NotificationsArray, taskList: number[]) {
   await Promise.all(notifications.map((n: any) => {
-    if (n?.name && n.name === 'task.comment') {
+    
+    if (n?.name && (n.name === 'task.comment' || n.name === 'task.mentioned')) {
       const taskId = n?.notification?.task?.id;
       if (taskId) taskList.push(taskId);
     }
   }));
 }
 
-// future task/thread function. Tasks don't belong to a user so porbably should use a new object instead of fit it into thread. 
 async function processTasks(logContext: LogContext, taskList: number[]) {
 
   const functionLogger = createLogger(logContext, {
@@ -71,38 +71,56 @@ async function processTasks(logContext: LogContext, taskList: number[]) {
     function: 'processTasks',
     additional: { taskList }
   })
-  // Create shared logging metadata
-  const logBase = {
-    ...logContext,
-    module: 'notification-test',
-    function: 'processTasks',
-  };
 
   for (const taskId of taskList) {
     // get task from project board.
-    const apiResult = await getTaskFromPB(logContext, taskId);
-
-    functionLogger.debug(
-      { apiResult },
-      `**processTasks** processing task: ${taskId}`
-    );
-
-    // save the task to firestore
-    if (apiResult?.success && apiResult?.data) {
-      await setTaskAbs(logContext, taskId.toString(), apiResult.data as Task)
-    }
-
-    functionLogger.debug(
-      { apiResult },
-      `**processTasks** saved to firestore task: ${taskId}`
-    );
+    await loadTask(logContext, taskId);
   }
 
   // now all the tasks should be in firestore now. we call a function review them.
 
-  reviewTaskList(logContext, taskList);
+  nbaTaskList(logContext, taskList);
 
 }
 
 
+/**
+ * Load task from project board first then load the task from the firestore. merge/hydrate 
+ * both tasks to create the hydrated task object
+ * @param logContext 
+ * @param taskId 
+ * @param functionLogger 
+ */
+async function loadTask(logContext: LogContext, taskId: number) {
+
+  const functionLogger = createLogger(logContext, {
+    module: 'notification-test',
+    function: 'loadTask',
+  });
+
+  const apiResult = await getTaskFromPB(logContext, taskId);
+
+  functionLogger.debug(
+    { apiResult },
+    `**processTasks** processing task: ${taskId}`
+  );
+
+  if (apiResult?.success && apiResult?.data) {
+    const taskFromPb = apiResult.data;
+    const taskFromDb = await getTaskFromDB(logContext, taskId.toString())
+
+    // Now we need merge taskFromPb and taskFromDb
+    const hydratedTask = deepMergeObjects(taskFromDb, taskFromPb);
+
+  }
+  // // save the task to firestore
+  // if (apiResult?.success && apiResult?.data) {
+  //   await setTaskAbs(logContext, taskId.toString(), apiResult.data as Task);
+  // }
+
+  functionLogger.debug(
+    { apiResult },
+    `**processTasks** saved to firestore task: ${taskId}`
+  );
+}
 

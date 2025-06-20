@@ -1,7 +1,7 @@
 // api-util.ts
 import { z, ZodError, type ZodSchema } from 'zod';
 import { formatError, formatResponseError } from './error-util';
-import { removeNulls } from './object-util';
+import { removeInvalid, removeNulls } from './object-util';
 
 /**
  * Standardized API response type indicating success or failure
@@ -45,7 +45,8 @@ export type ApiResponseResult<T> =
  */
 export async function parseApiResponse<T = unknown>(
     response: Response,
-    schema?: ZodSchema<T>
+    schema?: ZodSchema<T>,
+    fieldValueValidator?: ((value: any) => boolean)
 ): Promise<ApiResponseResult<T>> {
 
     // Handle 204 No Content response immediately
@@ -77,7 +78,9 @@ export async function parseApiResponse<T = unknown>(
             };
         }
 
-        const trimedJsonData = removeNulls(jsonData);
+        const trimedJsonData = fieldValueValidator ?
+            removeInvalid(jsonData, fieldValueValidator) :
+            removeNulls(jsonData);
 
         // Return parsed data directly if no schema provided
         if (!schema) {

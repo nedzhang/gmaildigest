@@ -6,7 +6,7 @@ import {
   SummarizeEmailOutput,
   SummarizeEmailOutputSchema,
 } from "@/ai/schema/email";
-import logger, { LogContext, makeLogContext, makeLogEntry } from "@/lib/logger";
+import logger, { createLogContext, createLogger } from "@/lib/logger";
 import dotenv from "dotenv";
 import { ai } from "@/ai/genkit";
 import { NextRequest, NextResponse } from "next/server";
@@ -66,18 +66,17 @@ const emailToTest: SummarizeEmailInput = {
 };
 
 export async function GET(req: NextRequest) {
-  const logContext = makeLogContext({ req });
+  const logContext = createLogContext({ req });
 
-  logger.info(makeLogEntry(
-    {
-      ...logContext,
-      time: Date.now(),
-      module: "genkit-openai-test",
-      function: "GET",
-    },
+  const functionLogger = createLogger(logContext, {
+    module: 'genkit-openai-test',
+    function: 'GET',
+  })
+
+  functionLogger.info(
     { ai },
     "**genkit-openai-test** genkit ai object initialized.",
-  ));
+  );
 
   const aiResponse = await summarizeEmailFlow(emailToTest);
 
@@ -91,16 +90,10 @@ export async function GET(req: NextRequest) {
   //   ],
   // });
 
-  logger.info(makeLogEntry(
-    {
-      ...logContext,
-      time: Date.now(),
-      module: "genkit-openai-test",
-      function: "GET",
-    },
+  functionLogger.info(
     { aiResponse },
     "**genkit-openai-test** genkit ai flow responded.",
-  ));
-
+  );
+  
   return NextResponse.json(aiResponse);
 }

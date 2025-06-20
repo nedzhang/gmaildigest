@@ -1,5 +1,5 @@
 ---
-model: openai/deepseek/deepseek-chat-v3-0324:free
+model: openai/deepseek/deepseek-r1:free
 config:
   temperature: 0.4
   topK: 32

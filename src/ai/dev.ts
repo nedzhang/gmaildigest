@@ -10,4 +10,5 @@ import '@/ai/flows/summarize-message';
 import '@/ai/flows/summarize-text';
 
 import '@/ai/schema/email';
- 
+
+import '@/ai/schema/task';

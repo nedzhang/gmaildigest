@@ -138,7 +138,7 @@ const configureTransports = (): pino.TransportTargetOptions[] => {
   else {
     sinks.push({
       target: "pino/file",
-      level: IS_TEST ? "trace" : "info",
+      level: IS_TEST ? "warn" : "info",
       options: { destination: 1 }, // stdout
     });
   }

@@ -12,47 +12,40 @@ import {
   GmailThreadSchema,
 } from "@/types/gmail";
 import { getGmailThreads } from "./gmail-util"; // Assuming these are the exported functions
-import logger, { LogContext, makeLogContext, makeLogEntry } from "./logger";
+import logger, { createLogger, LogContext } from "./logger";
 import { generateId } from "./uid-util";
 
 describe("gmail-util", () => {
   describe("parseGmailMessage", () => {
     const mockRequestId = generateId();
-
     const mockLogContext: LogContext = {
       requestId: mockRequestId,
     };
 
-    it("should get user gmail threads from Gmail API", () => {
-      getGmailThreads(mockLogContext, "ned.zhang@paracognition.ai")
-        .then((gmailThreadList) => {
-          expect(gmailThreadList).toBeDefined();
-          // expect(() => GmailThreadListSchema.parse(gmailThreadList)).not.toThrow();
-          expect(gmailThreadList?.length).toBeGreaterThan(0);
+    const functionLogger = createLogger(mockLogContext, {
+      module: 'gmail-util-test',
+      function: 'parseGmailMessage',
+    })
 
-          gmailThreadList?.map((thread) => {
-            expect(() => GmailThreadSchema.parse(thread)).not.toThrow();
-            expect(thread.id).toBeDefined();
-            expect(thread.historyId).toBeDefined();
-            // expect(thread.snippet).toBeDefined();
-            // expect(thread.messages).toBeDefined();
-          });
+    // Corrected test using async/await
+    it("should get user gmail threads from Gmail API", async () => {
+      // Use await to pause execution until promise resolves
+      const gmailThreadList = await getGmailThreads(mockLogContext, "ned.zhang@paracognition.ai");
 
-          logger.info(makeLogEntry(
-            {
-              ...mockLogContext,
-              time: Date.now(),
-              module: "gmail-util.test",
-              function: "parseGemaiMessage",
-            },
-            { gmailThreadList },
-            `**gmail-util.test** Retrieved user's gmails.`,
-          ));
-        })
-        .catch((error) => {
-          console.error("Error:", error);
-        });
-    } // 20 * 1000 // time out in 20 seconds
-    );
+      expect(gmailThreadList).toBeDefined();
+      expect(gmailThreadList?.length).toBeGreaterThan(0);
+
+      gmailThreadList?.forEach((thread) => {
+        expect(() => GmailThreadSchema.parse(thread)).not.toThrow();
+        expect(thread.id).toBeDefined();
+        expect(thread.historyId).toBeDefined();
+      });
+
+      functionLogger.info(
+        { gmailThreadList },
+        `**gmail-util.test** Retrieved user's gmails.`
+      );
+
+    }, 20000); // Timeout extended to 20 seconds
   });
 });

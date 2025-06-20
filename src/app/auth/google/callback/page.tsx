@@ -4,8 +4,7 @@
 
 import { redirect } from 'next/navigation';
 import CallbackUrlComponent from '@/components/auth/CallbackUrlComponent';
-// import { googleOAuth2CallbackServerAction } from './actions';
-import logger, { LogContext, makeLogEntry } from '@/lib/logger';
+import { createLogger, LogContext } from '@/lib/logger';
 import { googleOAuth2Callback } from './callback-backend';
 import { headers } from 'next/headers';
 
@@ -18,16 +17,15 @@ export async function googleOAuth2CallbackServerAction(
   callbackUrl: string,
   code: string
 ) {
+  const functionLogger = createLogger(logContext, {
+    module: "auth/google/callback/page", function: "googleOAuth2CallbackServerAction",
+    additional: { callbackUrl }
+  })
   try {
     await googleOAuth2Callback(logContext, callbackUrl, code);
   } catch (error) {
-    logger.error(makeLogEntry({
-      ...logContext,
-      time: Date.now(),
-      module: 'auth/google/callback/page',
-      function: 'googleOAuth2CallbackServerAction',
-    }, {err: error},
-      '**googleOauth2CallbackServerAction** OAuth processing failed:'));
+    functionLogger.error({ err: error },
+      '**googleOauth2CallbackServerAction** OAuth processing failed:');
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     throw new Error(message);
   }
@@ -44,14 +42,14 @@ const GoogleCallbackPage = async ({ searchParams }: PageProps) => {
     requestId,
   }
 
+  const functionLogger = createLogger(logContext, {
+    module: "auth/google/callback/page", function: "GoogleCallbackPage",
+  })
+
   // Validate code parameter
   if (!code || Array.isArray(code)) {
-    logger.error(makeLogEntry({
-      ...logContext,
-      time: Date.now(),
-      module: 'auth/google/callback/page',
-      function: 'GoogleCallbackPage',
-    }, {}, '**GoogleBaclbackPage** Authorization code missing from callback URL'));
+    functionLogger.error({ nextHeaders },  // TODO: check if we have senstive information in nextHeders.
+      '**GoogleBaclbackPage** Authorization code missing from callback URL');
 
     redirect(`/auth/error?message=${encodeURIComponent('Authorization code missing')}`);
   }

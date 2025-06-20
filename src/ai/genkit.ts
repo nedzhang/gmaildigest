@@ -39,6 +39,8 @@ const gemini25proexp0325: ModelInfo = {
   },
 };
 
+
+
 const schema = GenerationCommonConfigSchema.extend({});
 
 export const ai = genkit({

@@ -7,8 +7,8 @@ import type { Config } from "jest";
 
 
 import nextJest from 'next/jest.js'
- 
- 
+
+
 
 const config: Config = {
   // All imported modules in your tests should be mocked automatically
@@ -73,6 +73,8 @@ const config: Config = {
 
   // A path to a module which exports an async function that is triggered once after all test suites
   // globalTeardown: undefined,
+  globalTeardown: './jest-teardown.js',
+
 
   // A set of global variables that need to be available in all test environments
   // globals: {},
@@ -119,6 +121,7 @@ const config: Config = {
 
   // A preset that is used as a base for Jest's configuration
   // preset: undefined,
+  preset: 'ts-jest',
 
   // Run tests from one or more projects
   // projects: undefined,
@@ -164,7 +167,7 @@ const config: Config = {
 
   // The test environment that will be used for testing
   // testEnvironment: "jest-environment-node",
-  testEnvironment: "jsdom",
+  testEnvironment: "node",
 
   // Options that will be passed to the testEnvironment
   // testEnvironmentOptions: {},

@@ -3,7 +3,7 @@ import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { createWorker } from 'tesseract.js';
-import { LogContext, makeLogContext } from './logger';
+import { LogContext } from './logger';
 
 // Supported MIME types
 const SUPPORTED_MIME_TYPES = [

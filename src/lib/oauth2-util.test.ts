@@ -62,16 +62,13 @@ describe("OAuth2 Utility", () => {
         it("Should get a renewed token.", (done) => {
             getAccessToken(mockLogContext, "ned.zhang@paracognition.ai")
                 .then((newToken) => {
-                    delay(3000) // wait 3 seconds for the logging to complete
-                        .then(() => {
-                            expect(newToken).toBeDefined();
-                            expect(newToken.length).toBeGreaterThan(0);
+                    expect(newToken).toBeDefined();
+                    expect(newToken.length).toBeGreaterThan(0);
 
-                            // need to let jest know that we are done
+                    // need to let jest know that we are done
 
-                            done();
-                        });
+                    done();
                 });
-        });
+        })
     });
 });

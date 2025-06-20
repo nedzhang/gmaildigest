@@ -2,13 +2,7 @@
  * @jest-environment node
  */
 
-import { Noto_Sans_Wancho } from "next/font/google";
-import logger, {
-    LogContext,
-    LogContextSchema,
-    makeLogContext,
-    makeLogEntry,
-} from "./logger";
+import { createLogContext, createLogger, LogContext, } from "./logger";
 import { parseGmailMessage } from "./stdmail-util";
 import { generateId } from "./uid-util";
 
@@ -242,12 +236,17 @@ describe("stdmail-util", () => {
         const mockRequestId = generateId();
         const mockUserId = "ned.zhang@paracognition.ai".toLowerCase();
 
-        const mockLogContext: LogContext = makeLogContext({
+        const mockLogContext: LogContext = createLogContext({
             requestId: mockRequestId,
             additional: {
                 userId: mockUserId,
             },
         });
+
+        const functionLogger = createLogger(mockLogContext, {
+            module: 'stdmail-util.test',
+            function: 'parseGmailMessage',
+        })
 
         it("parse gmail with an attachment to download", async () => {
             const stdMail = await parseGmailMessage(
@@ -257,17 +256,9 @@ describe("stdmail-util", () => {
                 true,
             );
 
-            logger.info(
-                makeLogEntry(
-                    {
-                        ...mockLogContext,
-                        time: Date.now(),
-                        module: "stdmail-util.test",
-                        function: "parse gmail with an attachment to download",
-                    },
-                    { stdMail },
-                    "parse gmail with an attachment to download",
-                ),
+            functionLogger.info(
+                { stdMail },
+                "parse gmail with an attachment to download",
             );
         });
     });

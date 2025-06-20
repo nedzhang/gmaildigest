@@ -1,18 +1,9 @@
 "use server";
 
 import admin from "firebase-admin";
-import { App, getApps as getAdminApps, ServiceAccount } from "firebase-admin/app";
-import {
-    FirebaseApp,
-    getApps as getFirebaseApps,
-    initializeApp,
-} from "firebase/app";
-import {
-    Auth,
-    getAuth,
-    signInWithCustomToken,
-    UserCredential,
-} from "firebase/auth";
+import { App, getApps as getAdminApps, deleteApp as deleteAdminApp, ServiceAccount } from "firebase-admin/app";
+import { FirebaseApp, deleteApp as deleteFirebaseApp, getApps as getFirebaseApps, initializeApp, } from "firebase/app";
+import { Auth, getAuth, signInWithCustomToken, UserCredential, } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { FirebaseServiceAccount } from "@/types/firebase";
 import SERVICE_ACCOUNT from "../../../secret/firebase-admin-service-account.json";
@@ -157,8 +148,37 @@ export async function getDb(logContext: LogContext, forceNew: boolean = false, r
 
     // check if we need to initialize the firestore
     if (!firestoreDb || forceNew) {
+        closeFirestore();
         firestoreDb = getFirestore(initializeFirebaseApp());
     }
 
     return firestoreDb;
+}
+
+// Add this function to clean up Firestore instances
+export async function closeFirestore(): Promise<void> {
+    if (firestoreDb) {
+        const app = firestoreDb.app;
+
+        try {
+            // Firestore doesn't have close method, delete parent app
+            if (app) {
+                await deleteFirebaseApp(app);
+            }
+        } catch (error) {
+            logger.error({ error }, "Error closing Firestore connection");
+        } finally {
+            firestoreDb = undefined;
+            // authInstance = undefined;
+            // userCredential = undefined;
+        }
+
+        // Clear any remaining Firebase client apps
+        getFirebaseApps().forEach(deleteFirebaseApp);
+    }
+}
+
+// Add this function to clean up Admin instances
+export async function closeFirebaseAdmin(): Promise<void> {
+    getAdminApps().forEach(deleteAdminApp);
 }
